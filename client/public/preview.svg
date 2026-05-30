@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630" role="img" aria-label="Web Intelligence Crawler dashboard preview">
+  <rect width="1200" height="630" fill="#071923"/>
+  <rect x="64" y="64" width="1072" height="502" rx="24" fill="#0E2633"/>
+  <rect x="96" y="104" width="260" height="422" rx="16" fill="#091F2B"/>
+  <rect x="396" y="104" width="700" height="92" rx="16" fill="#123746"/>
+  <rect x="396" y="224" width="214" height="132" rx="16" fill="#091F2B"/>
+  <rect x="638" y="224" width="214" height="132" rx="16" fill="#091F2B"/>
+  <rect x="880" y="224" width="216" height="132" rx="16" fill="#091F2B"/>
+  <rect x="396" y="388" width="700" height="98" rx="16" fill="#091F2B"/>
+  <circle cx="136" cy="140" r="18" fill="#0A6EFF"/>
+  <rect x="172" y="126" width="132" height="16" rx="8" fill="#EAF2F7"/>
+  <rect x="124" y="206" width="184" height="14" rx="7" fill="#678796"/>
+  <rect x="124" y="252" width="152" height="14" rx="7" fill="#678796"/>
+  <rect x="124" y="298" width="196" height="14" rx="7" fill="#678796"/>
+  <text x="436" y="160" fill="#EAF2F7" font-family="Arial, Helvetica, sans-serif" font-size="34" font-weight="700">Web Intelligence Crawler</text>
+  <text x="436" y="284" fill="#EAF2F7" font-family="Arial, Helvetica, sans-serif" font-size="22" font-weight="700">Live Crawls</text>
+  <text x="678" y="284" fill="#EAF2F7" font-family="Arial, Helvetica, sans-serif" font-size="22" font-weight="700">Emails</text>
+  <text x="920" y="284" fill="#EAF2F7" font-family="Arial, Helvetica, sans-serif" font-size="22" font-weight="700">Changes</text>
+  <text x="436" y="446" fill="#9DB4BF" font-family="Arial, Helvetica, sans-serif" font-size="24">Crawl pages, detect changes, and extract web intelligence.</text>
+  <path d="M455 322h106" stroke="#0A6EFF" stroke-width="10" stroke-linecap="round"/>
+  <path d="M697 322h86" stroke="#18C29C" stroke-width="10" stroke-linecap="round"/>
+  <path d="M939 322h112" stroke="#F6C85F" stroke-width="10" stroke-linecap="round"/>
+</svg>

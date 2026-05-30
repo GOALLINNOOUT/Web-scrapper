@@ -1,0 +1,18 @@
+{
+  "name": "Web Intelligence Crawler",
+  "short_name": "Web Crawler",
+  "description": "Monitor websites, crawl pages, detect changes, and extract emails, links, metadata, and live web intelligence.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#071923",
+  "theme_color": "#0A6EFF",
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "64x64",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}

@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Web Intelligence Crawler">
+  <rect width="64" height="64" rx="14" fill="#071923"/>
+  <path d="M18 37c0-10 8-18 18-18h10v8H36c-6 0-10 4-10 10v8h-8v-8Z" fill="#0A6EFF"/>
+  <path d="M30 45c0-8 6-14 14-14h4v8h-4c-3 0-6 3-6 6v2h-8v-2Z" fill="#18C29C"/>
+  <circle cx="20" cy="20" r="4" fill="#F6C85F"/>
+</svg>
