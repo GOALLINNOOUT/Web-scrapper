@@ -34,11 +34,21 @@ export function FloatingCrawlMonitor({ onCrawlChange }: FloatingCrawlMonitorProp
     load().catch(console.error);
   }, []);
 
+  useEffect(() => {
+    if (location.pathname !== '/') {
+      load().catch(console.error);
+    }
+  }, [location.pathname]);
+
   useLiveRefresh((event) => {
     const payload = parseLiveCrawlPage(event);
     if (payload) {
       setJob((current) => {
-        if (!current || current._id !== event.crawlId) return current;
+        if (!current) {
+          void load().catch(console.error);
+          return current;
+        }
+        if (current._id !== event.crawlId) return current;
         return applyLiveJobPatch(current, payload.job);
       });
       return;
@@ -48,7 +58,11 @@ export function FloatingCrawlMonitor({ onCrawlChange }: FloatingCrawlMonitorProp
       const snapshot = parseLiveCrawlJobSnapshot(event);
       setJob((current) => {
         if (!current && snapshot && isActiveCrawl(snapshot)) return snapshot;
-        if (!current || current._id !== event.crawlId) return current;
+        if (!current) {
+          void load().catch(console.error);
+          return current;
+        }
+        if (current._id !== event.crawlId) return current;
         return applyLiveJobPatch(current, jobPatch);
       });
     }

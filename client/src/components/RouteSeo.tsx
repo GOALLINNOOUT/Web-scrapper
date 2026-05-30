@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useLayoutEffect } from 'react';
 import { useLocation } from 'react-router-dom';
 
 const SITE_NAME = 'Web Intelligence Crawler';
@@ -72,7 +72,7 @@ const routeSeo: Array<{ match: (pathname: string) => boolean; config: RouteSeoCo
 export function RouteSeo() {
   const location = useLocation();
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const seo = routeSeo.find((item) => item.match(location.pathname))?.config || routeSeo[0].config;
     const title = seo.title;
     const url = `${window.location.origin}${location.pathname}`;
@@ -94,6 +94,7 @@ export function RouteSeo() {
     setMeta('property', 'og:url', url);
     setMeta('property', 'og:image', imageUrl);
     setCanonical(url);
+    setAlternateLanguage(url);
   }, [location.pathname]);
 
   return null;
@@ -115,6 +116,17 @@ function setCanonical(href: string) {
   if (!element) {
     element = document.createElement('link');
     element.rel = 'canonical';
+    document.head.appendChild(element);
+  }
+  element.href = href;
+}
+
+function setAlternateLanguage(href: string) {
+  let element = document.head.querySelector<HTMLLinkElement>('link[rel="alternate"][hreflang="en"]');
+  if (!element) {
+    element = document.createElement('link');
+    element.rel = 'alternate';
+    element.hreflang = 'en';
     document.head.appendChild(element);
   }
   element.href = href;

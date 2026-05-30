@@ -19,11 +19,13 @@ export function extractMetadata($: CheerioAPI, baseUrl?: string): Metadata {
   const ogImage = resolveMaybe(attr($, 'meta[property="og:image"]', 'content'), baseUrl);
   const twitterImage = resolveMaybe(meta($, 'twitter:image'), baseUrl);
   const keywords = splitKeywords(meta($, 'keywords'));
+  const canonical = canonicalUrl(resolveMaybe(attr($, 'link[rel="canonical"]', 'href'), baseUrl), baseUrl);
+  const ogUrl = canonicalUrl(resolveMaybe(attr($, 'meta[property="og:url"]', 'content'), baseUrl), baseUrl);
 
   return {
     title,
     description,
-    canonical: resolveMaybe(attr($, 'link[rel="canonical"]', 'href'), baseUrl),
+    canonical,
     language: attr($, 'html', 'lang'),
     viewport: meta($, 'viewport'),
     robots: meta($, 'robots') || meta($, 'googlebot'),
@@ -37,7 +39,7 @@ export function extractMetadata($: CheerioAPI, baseUrl?: string): Metadata {
     manifest: resolveMaybe(attr($, 'link[rel="manifest"]', 'href'), baseUrl),
     ampUrl: resolveMaybe(attr($, 'link[rel="amphtml"]', 'href'), baseUrl),
     alternateLanguages: alternateLanguages($, baseUrl),
-    ogUrl: resolveMaybe(attr($, 'meta[property="og:url"]', 'content'), baseUrl),
+    ogUrl,
     ogType: attr($, 'meta[property="og:type"]', 'content'),
     ogTitle: attr($, 'meta[property="og:title"]', 'content'),
     ogDescription: attr($, 'meta[property="og:description"]', 'content'),
@@ -51,6 +53,21 @@ export function extractMetadata($: CheerioAPI, baseUrl?: string): Metadata {
     twitterImage,
     jsonLdTypes: jsonLdTypes($)
   };
+}
+
+function canonicalUrl(value: string, baseUrl?: string) {
+  if (!baseUrl) return value;
+  if (!value) return baseUrl;
+  try {
+    const current = new URL(baseUrl);
+    const canonical = new URL(value);
+    const canonicalIsSiteRoot = canonical.origin === current.origin && canonical.pathname.replace(/\/+$/, '') === '';
+    const currentIsDeeperRoute = current.pathname.replace(/\/+$/, '') !== '';
+    if (canonicalIsSiteRoot && currentIsDeeperRoute) return current.toString();
+    return canonical.toString();
+  } catch {
+    return value;
+  }
 }
 
 function resolveMaybe(value: string, baseUrl?: string) {
