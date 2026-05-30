@@ -22,26 +22,23 @@ const labels = {
 const toneStyles = {
   success: {
     shell: 'border-emerald-200/80',
-    rail: 'bg-emerald-500',
     icon: 'bg-emerald-50 text-emerald-700 ring-emerald-100',
     label: 'text-emerald-700',
     bar: 'bg-emerald-500'
   },
   error: {
     shell: 'border-red-200/80',
-    rail: 'bg-red-500',
     icon: 'bg-red-50 text-red-700 ring-red-100',
     label: 'text-red-700',
     bar: 'bg-red-500'
   },
   message: {
     shell: 'border-[#dbe7ff]',
-    rail: 'bg-brand-600',
     icon: 'bg-[#ebf2ff] text-brand-700 ring-[#dbe7ff]',
     label: 'text-brand-700',
     bar: 'bg-brand-600'
   }
-} satisfies Record<ToastTone, { shell: string; rail: string; icon: string; label: string; bar: string }>;
+} satisfies Record<ToastTone, { shell: string; icon: string; label: string; bar: string }>;
 
 export function ToastProvider() {
   const [toasts, setToasts] = useState<ToastItem[]>([]);
@@ -72,17 +69,16 @@ export function ToastProvider() {
         const Icon = icons[toast.tone];
         const tone = toneStyles[toast.tone];
         return (
-          <div className={`toast-enter relative grid grid-cols-[4px_36px_minmax(0,1fr)_30px] items-start gap-3 overflow-hidden rounded-lg border bg-white shadow-[0_24px_70px_rgba(17,17,16,0.16)] ${tone.shell}`} key={toast.id}>
-            <span className={`h-full min-h-[86px] ${tone.rail}`} />
+          <div className={`toast-enter relative grid grid-cols-[36px_minmax(0,1fr)_30px] items-start gap-3 overflow-hidden rounded-lg border bg-white p-4 pb-5 shadow-[0_24px_70px_rgba(17,17,16,0.16)] ${tone.shell}`} key={toast.id}>
             <span className={`mt-4 grid h-9 w-9 place-items-center rounded-md ring-1 ${tone.icon}`}>
               <Icon size={18} />
             </span>
-            <div className="min-w-0 py-4 pr-1">
+            <div className="min-w-0 pr-1">
               <span className={`text-[11px] font-extrabold uppercase tracking-[0.14em] ${tone.label}`}>{labels[toast.tone]}</span>
               <strong className="mt-1 block break-words text-[15px] font-extrabold leading-5 text-[#111110]">{toast.title}</strong>
               {toast.description ? <span className="mt-1.5 block break-words text-xs font-semibold leading-5 text-[#636360]">{toast.description}</span> : null}
             </div>
-            <button className="mr-3 mt-3 grid h-7 w-7 place-items-center rounded-md bg-[#f5f5f2] text-[#636360] transition hover:bg-[#efefeb] hover:text-[#111110]" type="button" onClick={() => setToasts((current) => current.filter((item) => item.id !== toast.id))}>
+            <button className="grid h-7 w-7 place-items-center rounded-md bg-[#f5f5f2] text-[#636360] transition hover:bg-[#efefeb] hover:text-[#111110]" type="button" onClick={() => setToasts((current) => current.filter((item) => item.id !== toast.id))}>
               <X size={14} />
             </button>
             <span className={`toast-progress absolute bottom-0 left-0 h-1 ${tone.bar}`} />

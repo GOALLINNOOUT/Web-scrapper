@@ -2,7 +2,7 @@ import * as cheerio from 'cheerio';
 import { CrawlJob } from '../models/CrawlJob.js';
 import { Page } from '../models/Page.js';
 import { fetchPage } from './fetchPage.js';
-import { renderPageContent } from './renderPage.js';
+import { renderPageSnapshot } from './renderPage.js';
 import { discoverSitemapUrls } from './sitemap.js';
 import { isAllowedByRobots } from './robots.js';
 import { normalizeCrawlConfig, withCrawlConfigDefaults, type RawCrawlConfig } from './config.js';
@@ -437,18 +437,22 @@ export class CrawlManager {
       let extractionHtml = html;
       let $ = cheerio.load(extractionHtml);
       let links = config.extract.links ? extractLinks($, item.url, { includeMetaLinks: config.discovery.includeMetaLinks }) : [];
+      let runtimeTechStack: string[] = [];
 
       if (
-        config.extract.links
-        && config.discovery.renderJavaScript
-        && links.length < config.discovery.renderWhenStaticLinksBelow
+        config.discovery.renderJavaScript
+        && (
+          !config.extract.links
+          || links.length < config.discovery.renderWhenStaticLinksBelow
+        )
       ) {
-        const renderedHtml = await renderPageContent(item.url, signal);
-        if (renderedHtml) {
-          const rendered$ = cheerio.load(renderedHtml);
+        const renderedSnapshot = await renderPageSnapshot(item.url, signal);
+        if (renderedSnapshot) {
+          runtimeTechStack = renderedSnapshot.techStack;
+          const rendered$ = cheerio.load(renderedSnapshot.html);
           const renderedLinks = extractLinks(rendered$, item.url, { includeMetaLinks: config.discovery.includeMetaLinks });
           links = [...new Set([...links, ...renderedLinks])];
-          extractionHtml = renderedHtml;
+          extractionHtml = renderedSnapshot.html;
           $ = rendered$;
         }
       }
@@ -456,7 +460,8 @@ export class CrawlManager {
       const emails = config.extract.emails ? extractEmails(extractionHtml) : [];
       const metadata = config.extract.metadata ? extractMetadata($, item.url) : {};
       const social = config.extract.social ? extractSocialLinks(links) : emptySocial();
-      const techStack = detectTechStack($, {}, extractionHtml);
+      const staticTechStack = detectTechStack($, {}, extractionHtml);
+      const techStack = [...new Set([...staticTechStack, ...runtimeTechStack])].sort();
       const content = config.extract.content !== false ? extractContent($) : { text: '', headings: [], paragraphs: [], wordCount: 0 };
       const classification = classifyPage(item.url, metadata.title);
       const score = scorePage({ metadata, content, emails, social, classification });

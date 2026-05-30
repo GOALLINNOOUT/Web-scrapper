@@ -4,7 +4,7 @@ import { CrawlJob } from '../models/CrawlJob.js';
 import { Page } from '../models/Page.js';
 import type { QueueBundle } from '../queue/queues.js';
 import { fetchPageResult } from '../crawler/fetchPage.js';
-import { renderPageContent } from '../crawler/renderPage.js';
+import { renderPageSnapshot } from '../crawler/renderPage.js';
 import { isAllowedByRobots } from '../crawler/robots.js';
 import { runExtractorPipeline } from '../extractors/pipeline.js';
 import { isPrivateUrl } from '../middleware/ssrfProtection.js';
@@ -111,14 +111,15 @@ export async function processCrawlPage(data: CrawlPageJobData, queues?: QueueBun
       && config.discovery.renderJavaScript
       && extracted.links.length < config.discovery.renderWhenStaticLinksBelow
     ) {
-      const renderedHtml = await renderPageContent(finalUrl);
-      if (renderedHtml) {
-        const rendered = await runExtractorPipeline(renderedHtml, finalUrl, result.headers, {
+      const renderedSnapshot = await renderPageSnapshot(finalUrl);
+      if (renderedSnapshot) {
+        const rendered = await runExtractorPipeline(renderedSnapshot.html, finalUrl, result.headers, {
           includeMetaLinks: config.discovery.includeMetaLinks
         });
         extracted = {
           ...rendered,
-          links: [...new Set([...extracted.links, ...rendered.links])]
+          links: [...new Set([...extracted.links, ...rendered.links])],
+          techStack: [...new Set([...extracted.techStack, ...rendered.techStack, ...renderedSnapshot.techStack])].sort()
         };
       }
     }
