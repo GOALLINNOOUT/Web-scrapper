@@ -51,9 +51,6 @@ export function crawlRouter({ crawlManager }: { crawlManager: CrawlManager }) {
 
   router.get('/:id/results', async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const job = await CrawlJob.exists({ _id: req.params.id, deviceId: req.deviceId });
-      if (!job) return res.status(404).json({ error: 'NOT_FOUND', message: 'Crawl job not found' });
-
       const limit = parseLimit(req.query.limit, 25, 100);
       const cursor = cursorFilter(req.query.cursor);
       const query = {
@@ -68,7 +65,7 @@ export function crawlRouter({ crawlManager }: { crawlManager: CrawlManager }) {
         cursor: req.query.cursor || '',
         include: includeFull ? 'full' : 'compact'
       });
-      const result = await withCache(cacheKey, config.cacheTtlDataMs, async () => {
+      const resultPromise = withCache(cacheKey, config.cacheTtlDataMs, async () => {
         const pages = await Page.find(query, includeFull ? undefined : COMPACT_PAGE_PROJECTION)
           .sort({ crawledAt: -1, _id: -1 })
           .limit(limit + 1)
@@ -76,6 +73,12 @@ export function crawlRouter({ crawlManager }: { crawlManager: CrawlManager }) {
 
         return toCursorPage(pages, limit);
       });
+      const [job, result] = await Promise.all([
+        CrawlJob.exists({ _id: req.params.id, deviceId: req.deviceId }),
+        resultPromise
+      ]);
+
+      if (!job) return res.status(404).json({ error: 'NOT_FOUND', message: 'Crawl job not found' });
 
       res.json(result);
     } catch (error) {

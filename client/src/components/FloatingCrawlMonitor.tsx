@@ -27,7 +27,20 @@ export function FloatingCrawlMonitor({ onCrawlChange }: FloatingCrawlMonitorProp
 
   async function load() {
     const jobs = await api.listCrawls();
-    setJob(jobs.find((item) => isActiveCrawl(item)) || null);
+    const activeJob = jobs.find((item) => isActiveCrawl(item));
+    if (activeJob) {
+      setJob(activeJob);
+      return;
+    }
+
+    const routeCrawlId = crawlIdFromPath(location.pathname);
+    if (routeCrawlId) {
+      const routeJob = await api.getCrawl(routeCrawlId);
+      setJob(isActiveCrawl(routeJob) ? routeJob : null);
+      return;
+    }
+
+    setJob(null);
   }
 
   useEffect(() => {
@@ -179,6 +192,11 @@ export function FloatingCrawlMonitor({ onCrawlChange }: FloatingCrawlMonitorProp
 
 function isActiveCrawl(job: CrawlJob) {
   return ['queued', 'running', 'paused'].includes(job.status);
+}
+
+function crawlIdFromPath(pathname: string) {
+  const match = pathname.match(/^\/crawls\/([^/?#]+)/);
+  return match?.[1] ? decodeURIComponent(match[1]) : null;
 }
 
 function MiniMetric({ label, value }: { label: string; value: number }) {

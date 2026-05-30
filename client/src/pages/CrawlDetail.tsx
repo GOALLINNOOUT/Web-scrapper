@@ -34,36 +34,29 @@ export function CrawlDetail() {
   const [allSocialsOpen, setAllSocialsOpen] = useState(false);
   const [openSocialPlatforms, setOpenSocialPlatforms] = useState<Set<string>>(new Set());
 
-  async function loadCrawl(crawlId: string) {
-    const [crawlJob, results, crawlSummary] = await Promise.all([
-      api.getCrawl(crawlId),
-      api.getCrawlResults(crawlId, { limit: PAGE_SIZE }),
-      api.getCrawlSummary(crawlId)
-    ]);
-    setJob(crawlJob);
-    setPages(results.items);
-    setSummary(crawlSummary);
-    setNextCursor(results.nextCursor);
-    setIsLoading(false);
-  }
-
   useEffect(() => {
     if (!id) return undefined;
     const crawlId = id;
     let cancelled = false;
 
     async function load() {
-      const [crawlJob, results, crawlSummary] = await Promise.all([
+      setIsLoading(true);
+      setSummary(null);
+      const [crawlJob, results] = await Promise.all([
         api.getCrawl(crawlId),
-        api.getCrawlResults(crawlId, { limit: PAGE_SIZE }),
-        api.getCrawlSummary(crawlId)
+        api.getCrawlResults(crawlId, { limit: PAGE_SIZE })
       ]);
       if (cancelled) return;
       setJob(crawlJob);
       setPages(results.items);
-      setSummary(crawlSummary);
       setNextCursor(results.nextCursor);
       setIsLoading(false);
+
+      api.getCrawlSummary(crawlId)
+        .then((crawlSummary) => {
+          if (!cancelled) setSummary(crawlSummary);
+        })
+        .catch(console.error);
     }
 
     load().catch((error) => {

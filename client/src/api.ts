@@ -74,13 +74,13 @@ function withDeviceQuery(path: string) {
 }
 
 function getReadCacheTtl(path: string) {
-  if (path === '/crawl') return 2500;
-  if (path.startsWith('/crawl/') && path.includes('/results')) return 2500;
-  if (path.startsWith('/crawl/') && path.includes('/summary')) return 2500;
-  if (path.startsWith('/crawl/')) return 2500;
-  if (path.startsWith('/monitoring')) return 3000;
-  if (path.startsWith('/data?')) return 2500;
-  if (path.startsWith('/domain')) return 5000;
+  if (path === '/crawl') return 5000;
+  if (path.startsWith('/crawl/') && path.includes('/results')) return 5000;
+  if (path.startsWith('/crawl/') && path.includes('/summary')) return 7500;
+  if (path.startsWith('/crawl/')) return 5000;
+  if (path.startsWith('/monitoring')) return 10_000;
+  if (path.startsWith('/data?')) return 7500;
+  if (path.startsWith('/domain')) return 30_000;
   return DEFAULT_GET_CACHE_MS;
 }
 

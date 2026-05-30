@@ -2,6 +2,8 @@ import { config } from '../config/index.js';
 import { redisConnection } from '../queue/connection.js';
 import { logger } from './logger.js';
 
+const pendingCacheReads = new Map<string, Promise<unknown>>();
+
 export function cacheEnabled() {
   return Boolean(config.redisUrl);
 }
@@ -29,9 +31,21 @@ export async function setCachedJson(key: string, value: unknown, ttlMs: number) 
 export async function withCache<T>(key: string, ttlMs: number, producer: () => Promise<T>): Promise<T> {
   const cached = await getCachedJson<T>(key);
   if (cached !== null) return cached;
-  const value = await producer();
-  await setCachedJson(key, value, ttlMs);
-  return value;
+
+  const pending = pendingCacheReads.get(key);
+  if (pending) return pending as Promise<T>;
+
+  const promise = producer()
+    .then(async (value) => {
+      await setCachedJson(key, value, ttlMs);
+      return value;
+    })
+    .finally(() => {
+      pendingCacheReads.delete(key);
+    });
+
+  pendingCacheReads.set(key, promise);
+  return promise;
 }
 
 export async function invalidateCachePatterns(patterns: string[]) {
