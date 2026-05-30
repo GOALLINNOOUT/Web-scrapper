@@ -10,6 +10,7 @@ import { Domains } from './pages/Domains.jsx';
 import { Monitoring } from './pages/Monitoring.jsx';
 import { Settings } from './pages/Settings.jsx';
 import { ToastProvider } from './components/ToastProvider.jsx';
+import { RouteSeo } from './components/RouteSeo.jsx';
 import { useLiveEvents } from './hooks/useLiveEvents.js';
 import './styles.css';
 
@@ -24,6 +25,7 @@ function RootApp() {
 
   return (
     <BrowserRouter>
+      <RouteSeo />
       <ToastProvider />
       <Routes>
         <Route element={<AppShell />}>
