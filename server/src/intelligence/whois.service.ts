@@ -1,4 +1,9 @@
-import whois from 'whois';
+import { createRequire } from 'node:module';
+
+const require = createRequire(import.meta.url);
+const whois = require('whois') as {
+  lookup: (domain: string, options: { timeout: number }, callback: (error: Error | null, data?: unknown) => void) => void;
+};
 
 export async function lookupWhois(domain: string) {
   const raw = await new Promise<string>((resolve, reject) => {
