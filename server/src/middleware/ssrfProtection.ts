@@ -37,7 +37,24 @@ export function isPrivateHost(hostname: string) {
   const host = hostname.toLowerCase().replace(/^\[|\]$/g, '');
   if (host === 'localhost' || host.endsWith('.localhost') || host === '0' || host === 'broadcasthost') return true;
   if (host === 'metadata.google.internal' || host === '169.254.169.254' || host === '100.100.100.200') return true;
-  if (net.isIP(host) === 6) return true;
+  if (net.isIP(host) === 6) {
+    const normalized = host.toLowerCase();
+    return normalized === '::'
+      || normalized === '::1'
+      || normalized.startsWith('fc')
+      || normalized.startsWith('fd')
+      || normalized.startsWith('fe80:')
+      || normalized.startsWith('ff')
+      || normalized.startsWith('2001:db8:')
+      || normalized.startsWith('64:ff9b:1:')
+      || normalized.startsWith('100::')
+      || normalized.startsWith('2002:')
+      || normalized.startsWith('::ffff:0:')
+      || normalized.startsWith('::ffff:127.')
+      || normalized.startsWith('::ffff:10.')
+      || normalized.startsWith('::ffff:192.168.')
+      || normalized.startsWith('::ffff:169.254.');
+  }
 
   if (net.isIP(host) === 4) {
     const parts = host.split('.').map(Number);

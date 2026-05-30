@@ -210,6 +210,7 @@ test('blocks private SSRF host targets', () => {
   assert.equal(isPrivateHost('169.254.169.254'), true);
   assert.equal(isPrivateHost('100.100.100.200'), true);
   assert.equal(isPrivateHost('::1'), true);
+  assert.equal(isPrivateHost('2607:f8b0:4006:81a::200e'), false);
   assert.equal(isPrivateHost('example.com'), false);
 });
 

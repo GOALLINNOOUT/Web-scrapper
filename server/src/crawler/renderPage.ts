@@ -113,8 +113,9 @@ async function getBrowser(chromium: ChromiumLike, proxy?: Parameters<typeof toPl
 
   try {
     return await browserPromise;
-  } catch {
+  } catch (error) {
     browserPromises.delete(key);
+    logger.warn({ err: error instanceof Error ? error.message : String(error) }, 'JavaScript rendering skipped because Chromium could not launch. Run `npx playwright install chromium` in this deployment.');
     return null;
   }
 }
