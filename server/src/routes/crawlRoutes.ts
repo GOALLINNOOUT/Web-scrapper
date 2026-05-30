@@ -1,0 +1,169 @@
+import { Router } from 'express';
+import type { Request, Response, NextFunction } from 'express';
+import { CrawlJob } from '../models/CrawlJob.js';
+import { Page } from '../models/Page.js';
+import { cursorFilter, parseLimit, toCursorPage } from '../lib/pagination.js';
+import type { CrawlManager } from '../crawler/CrawlManager.js';
+import { CrawlSummary } from '../models/CrawlSummary.js';
+import { rebuildCrawlSummary } from '../services/crawlSummaryService.js';
+import { config } from '../config/index.js';
+import { stableCacheKey, withCache } from '../utils/cache.js';
+
+const COMPACT_PAGE_PROJECTION = {
+  content: 0
+};
+
+export function crawlRouter({ crawlManager }: { crawlManager: CrawlManager }) {
+  const router = Router();
+
+  router.post('/', async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const job = await crawlManager.createJob(req.body, req.deviceId);
+      res.status(201).json(job);
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.get('/', async (_req: Request, res: Response, next: NextFunction) => {
+    try {
+      const jobs = await withCache(`crawl:list:${_req.deviceId}`, config.cacheTtlCrawlMs, () => (
+        CrawlJob.find({ deviceId: _req.deviceId })
+          .sort({ createdAt: -1 })
+          .limit(100)
+          .lean()
+      ));
+      res.json(jobs);
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.get('/:id', async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const job = await CrawlJob.findOne({ _id: req.params.id, deviceId: req.deviceId }).lean();
+      if (!job) return res.status(404).json({ error: 'NOT_FOUND', message: 'Crawl job not found' });
+      res.json(job);
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.get('/:id/results', async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const job = await CrawlJob.exists({ _id: req.params.id, deviceId: req.deviceId });
+      if (!job) return res.status(404).json({ error: 'NOT_FOUND', message: 'Crawl job not found' });
+
+      const limit = parseLimit(req.query.limit, 25, 100);
+      const cursor = cursorFilter(req.query.cursor);
+      const query = {
+        $and: [
+          { deviceId: req.deviceId, crawlId: req.params.id },
+          ...(cursor ? [cursor] : [])
+        ]
+      };
+      const includeFull = req.query.include === 'full';
+      const cacheKey = stableCacheKey(`crawl:results:${req.deviceId}:${req.params.id}`, {
+        limit,
+        cursor: req.query.cursor || '',
+        include: includeFull ? 'full' : 'compact'
+      });
+      const result = await withCache(cacheKey, config.cacheTtlDataMs, async () => {
+        const pages = await Page.find(query, includeFull ? undefined : COMPACT_PAGE_PROJECTION)
+          .sort({ crawledAt: -1, _id: -1 })
+          .limit(limit + 1)
+          .lean();
+
+        return toCursorPage(pages, limit);
+      });
+
+      res.json(result);
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.get('/:id/summary', async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const job = await CrawlJob.findOne({ _id: req.params.id, deviceId: req.deviceId }).lean();
+      if (!job) return res.status(404).json({ error: 'NOT_FOUND', message: 'Crawl job not found' });
+
+      const summary = await withCache(`crawl:summary:${req.deviceId}:${req.params.id}`, config.cacheTtlDataMs, async () => (
+        await CrawlSummary.findOne({ deviceId: req.deviceId, crawlId: req.params.id }).lean()
+          || await rebuildCrawlSummary(req.deviceId, String(req.params.id))
+      ));
+
+      res.json({
+        crawlId: req.params.id,
+        pagesCrawled: job.pagesCrawled || summary?.counts?.loadedPages || 0,
+        emails: summary?.emails || [],
+        emailOccurrences: summary?.emailOccurrences || [],
+        socials: summary?.socials || [],
+        socialOccurrences: summary?.socialOccurrences || [],
+        techStack: summary?.techStack || [],
+        counts: {
+          uniqueEmails: summary?.counts?.uniqueEmails || 0,
+          uniqueSocialProfiles: summary?.counts?.uniqueSocialProfiles || 0,
+          uniqueTech: summary?.counts?.uniqueTech || 0,
+          loadedPages: summary?.counts?.loadedPages || 0,
+          rawEmailOccurrences: job.emailsFound || summary?.counts?.rawEmailOccurrences || 0,
+          rawSocialOccurrences: job.socialLinksFound || summary?.counts?.rawSocialOccurrences || 0
+        }
+      });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.post('/:id/stop', async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const job = await crawlManager.stopJob(String(req.params.id), req.deviceId);
+      if (!job) return res.status(404).json({ error: 'NOT_FOUND', message: 'Crawl job not found' });
+      res.json(job);
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.post('/:id/pause', async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const job = await crawlManager.pauseJob(String(req.params.id), req.deviceId);
+      if (!job) return res.status(404).json({ error: 'NOT_FOUND', message: 'Crawl job not found' });
+      res.json(job);
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.post('/:id/continue', async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const job = await crawlManager.continueJob(String(req.params.id), req.deviceId);
+      if (!job) return res.status(404).json({ error: 'NOT_FOUND', message: 'Crawl job not found' });
+      res.json(job);
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.post('/:id/resume', async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const job = await crawlManager.continueJob(String(req.params.id), req.deviceId);
+      if (!job) return res.status(404).json({ error: 'NOT_FOUND', message: 'Crawl job not found' });
+      res.json(job);
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.post('/:id/retry', async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const job = await crawlManager.retryJob(String(req.params.id), req.deviceId);
+      if (!job) return res.status(404).json({ error: 'NOT_FOUND', message: 'Crawl job not found' });
+      res.status(201).json(job);
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  return router;
+}

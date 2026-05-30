@@ -1,0 +1,67 @@
+services:
+  - type: keyvalue
+    name: web-intel-redis
+    plan: starter
+    ipAllowList: []
+    maxmemoryPolicy: allkeys-lru
+
+  - type: web
+    name: web-intel-api
+    runtime: docker
+    plan: starter
+    dockerfilePath: ./docker/Dockerfile.api
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PERFORMANCE_MODE
+        value: production
+      - key: START_WORKERS_IN_API
+        value: "false"
+      - key: WEB_WORKERS
+        value: "1"
+      - key: CLIENT_ORIGIN
+        sync: false
+      - key: MONGODB_URI
+        sync: false
+      - key: REDIS_URL
+        fromService:
+          type: keyvalue
+          name: web-intel-redis
+          property: connectionString
+      - key: CRAWLER_RESPECT_ROBOTS
+        value: "true"
+      - key: CRAWLER_USER_AGENT
+        value: WebIntelligenceCrawler/1.0
+
+  - type: worker
+    name: web-intel-worker
+    runtime: docker
+    plan: starter
+    dockerfilePath: ./docker/Dockerfile.worker
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PERFORMANCE_MODE
+        value: production
+      - key: MONGODB_URI
+        sync: false
+      - key: REDIS_URL
+        fromService:
+          type: keyvalue
+          name: web-intel-redis
+          property: connectionString
+      - key: CRAWL_JOB_WORKER_CONCURRENCY
+        value: "4"
+      - key: CRAWL_PAGE_WORKER_CONCURRENCY
+        value: "50"
+      - key: CRAWL_PAGE_WORKER_RATE
+        value: "250"
+      - key: CRAWLER_DOMAIN_CONCURRENCY
+        value: "4"
+      - key: CRAWLER_DOMAIN_RATE_PER_SECOND
+        value: "5"
+      - key: CRAWLER_RESPECT_ROBOTS
+        value: "true"
+      - key: CRAWLER_USER_AGENT
+        value: WebIntelligenceCrawler/1.0
