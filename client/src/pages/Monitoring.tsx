@@ -1,4 +1,4 @@
-import { Activity, Bell, BriefcaseBusiness, CheckCircle2, ChevronRight, Eye, Globe2, Mail, Plus, Radar, Search, Sparkles } from 'lucide-react';
+import { Activity, Bell, Check, CheckCircle2, ChevronRight, Eye, Globe2, LoaderCircle, Mail, Plus, Radar, Search, Sparkles, X } from 'lucide-react';
 import type { FormEvent } from 'react';
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
@@ -23,6 +23,9 @@ export function Monitoring() {
   const [monitoringType, setMonitoringType] = useState<MonitoringProfile['monitoringType']>('competitive_intelligence');
   const [isLoading, setIsLoading] = useState(true);
   const [isAdding, setIsAdding] = useState(false);
+  const [isLoadingDetail, setIsLoadingDetail] = useState(false);
+  const [isSavingRecommendations, setIsSavingRecommendations] = useState(false);
+  const [selectedRecommendationUrls, setSelectedRecommendationUrls] = useState<Set<string>>(new Set());
 
   async function load() {
     const data = await api.getMonitoring();
@@ -43,10 +46,39 @@ export function Monitoring() {
 
   useEffect(() => {
     if (!activeDomain) return;
+    let cancelled = false;
+    setIsLoadingDetail(true);
     api.getMonitoringProfile(activeDomain)
-      .then((data) => setDomainDetail({ profile: data.profile, events: data.events }))
-      .catch(() => setDomainDetail(null));
+      .then((data) => {
+        if (!cancelled) setDomainDetail({ profile: data.profile, events: data.events });
+      })
+      .catch(() => {
+        if (!cancelled) setDomainDetail(null);
+      })
+      .finally(() => {
+        if (!cancelled) setIsLoadingDetail(false);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [activeDomain]);
+
+  useEffect(() => {
+    if (!domainDetail) return;
+    const monitored = new Set(domainDetail.profile.monitoredPages.map((page) => page.url));
+    const recommended = new Set(domainDetail.profile.recommendedPages.filter((page) => !monitored.has(page.url)).map((page) => page.url));
+    setSelectedRecommendationUrls(recommended);
+  }, [domainDetail?.profile._id, domainDetail?.profile.updatedAt]);
+
+  async function refreshProfile(domainName = activeDomain) {
+    if (!domainName) return;
+    const data = await api.getMonitoringProfile(domainName);
+    setDomainDetail({ profile: data.profile, events: data.events });
+  }
+
+  function selectDomain(domainName: string) {
+    setActiveDomain(domainName);
+  }
 
   async function addDomain(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -56,18 +88,57 @@ export function Monitoring() {
       const result = await api.createMonitoringProfile({ domain, monitoringType });
       showToast({ title: 'Monitoring started', description: result.profile.domain, tone: 'success' });
       setDomain('');
-      setActiveDomain(result.profile.domain);
       await load();
+      setActiveDomain(result.profile.domain);
+      await refreshProfile(result.profile.domain);
     } finally {
       setIsAdding(false);
     }
   }
 
   async function acceptRecommendations(profile: MonitoringProfile) {
-    const updated = await api.acceptMonitoringRecommendations(profile._id);
+    const monitoredUrls = new Set(profile.monitoredPages.map((page) => page.url));
+    const pendingRecommendations = profile.recommendedPages.filter((page) => !monitoredUrls.has(page.url));
+    setIsSavingRecommendations(true);
+    try {
+      const selected = pendingRecommendations
+        .filter((page) => selectedRecommendationUrls.has(page.url))
+        .map((page) => ({ ...page, enabled: true }));
+      if (selected.length === 0) {
+        showToast({ title: 'No recommendations selected', description: 'Select at least one page to monitor, or dismiss the recommendation.', tone: 'message' });
+        return;
+      }
+      const remainingRecommendations = pendingRecommendations.filter((page) => !selectedRecommendationUrls.has(page.url));
+      const updated = await api.updateMonitoringProfile(profile._id, { monitoredPages: [...profile.monitoredPages, ...selected], recommendedPages: remainingRecommendations });
+      setDomainDetail((current) => current ? { ...current, profile: updated } : current);
+      await load();
+      showToast({ title: 'Recommendations accepted', description: `${updated.monitoredPages.length} pages are now monitored.`, tone: 'success' });
+    } finally {
+      setIsSavingRecommendations(false);
+    }
+  }
+
+  function toggleRecommendation(url: string) {
+    setSelectedRecommendationUrls((current) => {
+      const next = new Set(current);
+      if (next.has(url)) next.delete(url);
+      else next.add(url);
+      return next;
+    });
+  }
+
+  async function dismissRecommendation(profile: MonitoringProfile, url: string) {
+    const updated = await api.updateMonitoringProfile(profile._id, {
+      recommendedPages: profile.recommendedPages.filter((page) => page.url !== url)
+    });
     setDomainDetail((current) => current ? { ...current, profile: updated } : current);
+    setSelectedRecommendationUrls((current) => {
+      const next = new Set(current);
+      next.delete(url);
+      return next;
+    });
     await load();
-    showToast({ title: 'Recommendations accepted', description: `${updated.monitoredPages.length} pages are now monitored.`, tone: 'success' });
+    showToast({ title: 'Recommendation dismissed', description: updated.domain, tone: 'message' });
   }
 
   const groupedEvents = useMemo(() => groupEvents(summary?.changeFeed || []), [summary]);
@@ -75,7 +146,7 @@ export function Monitoring() {
   if (isLoading || !summary) return <LoadingState title="Loading intelligence feed" rows={7} />;
 
   return (
-    <div className="grid gap-6">
+    <div className="grid min-w-0 gap-6 overflow-x-hidden">
       <header className="flex items-end justify-between gap-4 max-[900px]:grid">
         <div>
           <span className="text-xs font-extrabold uppercase tracking-[0.14em] text-brand-600">Monitoring</span>
@@ -84,7 +155,7 @@ export function Monitoring() {
         </div>
       </header>
 
-      <form className="grid grid-cols-[minmax(220px,1fr)_240px_150px] gap-3 rounded-lg border border-[#eaeae6] bg-white p-4 shadow-panel max-[860px]:grid-cols-1" onSubmit={addDomain}>
+      <form className="grid min-w-0 grid-cols-[minmax(0,1fr)_240px_150px] gap-3 rounded-lg border border-[#eaeae6] bg-white p-4 shadow-panel max-[860px]:grid-cols-1" onSubmit={addDomain}>
         <label className="relative">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-[#636360]" size={16} />
           <input className="h-12 w-full rounded-lg border border-[#eaeae6] bg-[#f5f5f2] pl-10 pr-3 text-sm font-semibold outline-none focus:border-brand-500 focus:bg-white" value={domain} onChange={(event) => setDomain(event.target.value)} placeholder="Add domain to monitor, e.g. example.com" />
@@ -95,15 +166,15 @@ export function Monitoring() {
         <button className="inline-flex h-12 items-center justify-center gap-2 rounded-lg bg-brand-600 px-4 text-sm font-extrabold text-white hover:bg-brand-700 disabled:opacity-60" disabled={isAdding} type="submit"><Plus size={16} /> Add</button>
       </form>
 
-      <div className="grid grid-cols-4 gap-4 max-[1100px]:grid-cols-2 max-[640px]:grid-cols-1">
+      <div className="grid min-w-0 grid-cols-[repeat(4,minmax(0,1fr))] gap-4 max-[1100px]:grid-cols-2 max-[640px]:grid-cols-1">
         <MetricCard icon={Sparkles} label="Changes today" value={summary.counts.changesToday} />
         <MetricCard icon={Globe2} label="New pages" value={summary.counts.newPages} />
         <MetricCard icon={Mail} label="New emails" value={summary.counts.newEmails} />
         <MetricCard icon={Radar} label="Monitored domains" value={summary.health.monitoredDomains} />
       </div>
 
-      <div className="grid grid-cols-[minmax(0,1.15fr)_minmax(360px,0.85fr)] gap-5 max-[1180px]:grid-cols-1">
-        <section className="rounded-lg border border-[#eaeae6] bg-white p-5 shadow-panel">
+      <div className="grid min-w-0 grid-cols-[minmax(0,1.15fr)_minmax(0,0.85fr)] gap-5 max-[1180px]:grid-cols-1">
+        <section className="min-w-0 rounded-lg border border-[#eaeae6] bg-white p-5 shadow-panel">
           <div className="mb-4 flex items-center justify-between gap-3">
             <h2 className="text-2xl font-extrabold">Change feed</h2>
             <Bell className="text-brand-600" size={20} />
@@ -121,31 +192,56 @@ export function Monitoring() {
           </div>
         </section>
 
-        <aside className="grid h-fit gap-5">
-          <section className="rounded-lg border border-[#eaeae6] bg-white p-5 shadow-panel">
+        <aside className="grid h-fit min-w-0 gap-5">
+          <section className="min-w-0 rounded-lg border border-[#eaeae6] bg-white p-5 shadow-panel">
             <h2 className="text-xl font-extrabold">Monitored domains</h2>
             <div className="mt-4 grid gap-2">
               {summary.profiles.length === 0 ? <EmptyState title="No domains yet" body="Start by adding a competitor, lead, or site you want to watch." /> : null}
-              {summary.profiles.map((profile) => (
-                <button className={`grid gap-1 rounded-lg p-3 text-left transition ${activeDomain === profile.domain ? 'bg-brand-600 text-white' : 'bg-[#f5f5f2] hover:bg-[#efefeb]'}`} key={profile._id} onClick={() => setActiveDomain(profile.domain)} type="button">
-                  <span className="flex items-center justify-between gap-2 font-extrabold">{profile.domain}<ChevronRight size={16} /></span>
-                  <span className={activeDomain === profile.domain ? 'text-sm font-semibold text-white/75' : 'text-sm font-semibold text-[#636360]'}>{profile.enabled ? 'Active' : 'Paused'} / {formatPreset(profile.monitoringType)} / {profile.schedule}</span>
-                </button>
-              ))}
+              {summary.profiles.map((profile) => {
+                const active = activeDomain === profile.domain;
+                const content = (
+                  <>
+                    <span className="flex min-w-0 items-center justify-between gap-2 font-extrabold">
+                      <span className="truncate">{profile.domain}</span>
+                      {!active && <ChevronRight className="shrink-0" size={16} />}
+                      {active && isLoadingDetail ? <LoaderCircle className="shrink-0 animate-spin" size={16} /> : null}
+                    </span>
+                    <span className={active ? 'text-sm font-semibold text-white/75' : 'text-sm font-semibold text-[#636360]'}>{profile.enabled ? 'Active' : 'Paused'} / {formatPreset(profile.monitoringType)} / {profile.schedule}</span>
+                  </>
+                );
+                return active ? (
+                  <div className="grid min-w-0 gap-1 rounded-lg bg-brand-600 p-3 text-left text-white shadow-[0_14px_34px_rgba(59,130,246,0.24)] transition hover:bg-brand-600" key={profile._id}>
+                    {content}
+                  </div>
+                ) : (
+                  <button className="grid min-w-0 gap-1 rounded-lg bg-[#f5f5f2] p-3 text-left transition hover:bg-[#efefeb]" key={profile._id} onClick={() => selectDomain(profile.domain)} type="button">
+                    {content}
+                  </button>
+                );
+              })}
             </div>
           </section>
 
+          {isLoadingDetail && !domainDetail ? (
+            <section className="min-w-0 rounded-lg border border-[#eaeae6] bg-white p-5 shadow-panel">
+              <LoadingState title="Loading domain intelligence" rows={4} />
+            </section>
+          ) : null}
+
           {domainDetail ? (
-            <section className="rounded-lg border border-[#eaeae6] bg-white p-5 shadow-panel">
+            <section className="min-w-0 rounded-lg border border-[#eaeae6] bg-white p-5 shadow-panel">
               <div className="flex items-start justify-between gap-3">
-                <div>
-                  <h2 className="text-xl font-extrabold">{domainDetail.profile.domain}</h2>
+                <div className="min-w-0">
+                  <h2 className="truncate text-xl font-extrabold">{domainDetail.profile.domain}</h2>
                   <p className="mt-1 text-sm font-semibold text-[#636360]">{domainDetail.profile.monitoredPages.length} monitored pages</p>
                 </div>
-                <button className="inline-flex min-h-10 items-center gap-2 rounded-lg bg-[#f5f5f2] px-3 text-sm font-extrabold hover:bg-[#efefeb]" onClick={() => acceptRecommendations(domainDetail.profile)} type="button"><CheckCircle2 size={15} /> Accept</button>
+                <button className="inline-flex min-h-10 items-center gap-2 rounded-lg bg-[#f5f5f2] px-3 text-sm font-extrabold hover:bg-[#efefeb] disabled:cursor-wait disabled:opacity-65" disabled={isSavingRecommendations || pendingRecommendations(domainDetail.profile).length === 0 || selectedRecommendationUrls.size === 0} onClick={() => acceptRecommendations(domainDetail.profile)} type="button">
+                  {isSavingRecommendations ? <LoaderCircle className="animate-spin" size={15} /> : <CheckCircle2 size={15} />}
+                  {isSavingRecommendations ? 'Saving' : 'Accept'}
+                </button>
               </div>
               <div className="mt-4 grid gap-3">
-                <PageList title="Recommended" pages={domainDetail.profile.recommendedPages} />
+                <PageList title="Recommended" pages={pendingRecommendations(domainDetail.profile)} selectedUrls={selectedRecommendationUrls} onToggle={toggleRecommendation} onDismiss={(url) => dismissRecommendation(domainDetail.profile, url)} />
                 <PageList title="Monitoring" pages={domainDetail.profile.monitoredPages} />
               </div>
             </section>
@@ -158,13 +254,13 @@ export function Monitoring() {
 
 function ChangeRow({ event, onDomain }: { event: ChangeEvent; onDomain: (domain: string) => void }) {
   return (
-    <article className="rounded-lg border border-[#eaeae6] bg-[#fbfbf8] p-4">
-      <div className="flex items-start justify-between gap-3">
+    <article className="change-event-card min-w-0 rounded-lg border border-[#eaeae6] bg-[#fbfbf8] p-4">
+      <div className="flex min-w-0 items-start justify-between gap-3">
         <button className="min-w-0 text-left" onClick={() => onDomain(event.domain)} type="button">
           <strong className="block truncate text-base">{formatEvent(event.eventType)}</strong>
           <span className="mt-1 block text-sm font-semibold text-[#636360]">{event.reason || 'Change detected'} / {event.domain}</span>
         </button>
-        <span className={`rounded-md px-2 py-1 text-xs font-extrabold ${event.severity === 'high' ? 'bg-red-50 text-red-700' : event.severity === 'medium' ? 'bg-amber-50 text-amber-700' : 'bg-[#efefeb] text-[#636360]'}`}>{event.severity}</span>
+        <span className={`shrink-0 rounded-md px-2 py-1 text-xs font-extrabold ${event.severity === 'high' ? 'bg-red-50 text-red-700' : event.severity === 'medium' ? 'bg-amber-50 text-amber-700' : 'bg-[#efefeb] text-[#636360]'}`}>{event.severity}</span>
       </div>
       <DiffPreview event={event} />
       {event.url ? <a className="mt-3 inline-flex max-w-full items-center gap-2 text-xs font-extrabold text-brand-700" href={event.url} target="_blank" rel="noreferrer"><Eye size={14} /> <span className="truncate">{event.url}</span></a> : null}
@@ -174,27 +270,77 @@ function ChangeRow({ event, onDomain }: { event: ChangeEvent; onDomain: (domain:
 
 function DiffPreview({ event }: { event: ChangeEvent }) {
   const rows = Object.entries(event.diff || {}).filter(([, value]) => value !== undefined && value !== null && String(value) !== '');
+  if (event.eventType === 'content_changed' && isHashOnly(event.oldValue) && isHashOnly(event.newValue)) {
+    return (
+      <div className="change-diff-card mt-3 min-w-0 rounded-md bg-white p-3 text-xs">
+        <span className="font-extrabold text-[#636360]">Content fingerprint changed</span>
+        <p className="mt-1 font-semibold leading-5 text-[#636360]">This older event only stored a hash fingerprint. Future content changes will show readable before/after excerpts.</p>
+      </div>
+    );
+  }
   if (rows.length === 0 && !event.oldValue && !event.newValue) return null;
   return (
-    <div className="mt-3 grid grid-cols-2 gap-2 text-xs max-[640px]:grid-cols-1">
-      <div className="rounded-md bg-white p-3"><span className="font-extrabold text-[#636360]">Before</span><pre className="mt-1 whitespace-pre-wrap break-words font-sans font-semibold">{formatValue(event.oldValue)}</pre></div>
-      <div className="rounded-md bg-white p-3"><span className="font-extrabold text-[#636360]">After</span><pre className="mt-1 whitespace-pre-wrap break-words font-sans font-semibold">{formatValue(event.newValue || Object.fromEntries(rows))}</pre></div>
+    <div className="mt-3 grid min-w-0 grid-cols-2 gap-2 text-xs max-[640px]:grid-cols-1">
+      <div className="change-diff-card min-w-0 rounded-md bg-white p-3"><span className="font-extrabold text-[#636360]">Before</span><pre className="mt-1 whitespace-pre-wrap break-words font-sans font-semibold">{formatValue(event.oldValue)}</pre></div>
+      <div className="change-diff-card min-w-0 rounded-md bg-white p-3"><span className="font-extrabold text-[#636360]">After</span><pre className="mt-1 whitespace-pre-wrap break-words font-sans font-semibold">{formatValue(event.newValue || Object.fromEntries(rows))}</pre></div>
     </div>
   );
 }
 
-function PageList({ title, pages }: { title: string; pages: MonitoringProfile['recommendedPages'] }) {
+function PageList({ title, pages, selectedUrls, onToggle, onDismiss }: { title: string; pages: MonitoringProfile['recommendedPages']; selectedUrls?: Set<string>; onToggle?: (url: string) => void; onDismiss?: (url: string) => void }) {
   return (
     <div>
       <h3 className="mb-2 text-xs font-extrabold uppercase tracking-[0.14em] text-[#636360]">{title}</h3>
-      <div className="grid gap-2">
-        {pages.length === 0 ? <p className="rounded-lg bg-[#f5f5f2] p-3 text-sm font-semibold text-[#636360]">No pages yet.</p> : null}
-        {pages.slice(0, 6).map((page) => (
-          <div className="rounded-lg bg-[#f5f5f2] p-3" key={page.url}>
-            <div className="flex items-center justify-between gap-2"><strong className="truncate">{page.label}</strong><span className="text-xs font-extrabold text-brand-700">{page.score}</span></div>
-            <p className="mt-1 line-clamp-2 text-xs font-semibold text-[#636360]">{page.reason}</p>
-          </div>
-        ))}
+      <div className="grid min-w-0 gap-2">
+        {pages.length === 0 ? <p className="min-w-0 rounded-lg bg-[#f5f5f2] p-3 text-sm font-semibold text-[#636360]">{title === 'Recommended' ? 'No pending recommendations.' : 'No pages yet.'}</p> : null}
+        {pages.slice(0, 6).map((page) => {
+          const selected = selectedUrls?.has(page.url) ?? false;
+          const interactive = Boolean(onToggle);
+          const content = (
+            <>
+              <div className="flex min-w-0 items-center justify-between gap-2">
+                <span className="flex min-w-0 items-center gap-2 overflow-hidden">
+                  {interactive ? <span className={`grid h-6 w-6 shrink-0 place-items-center rounded-md border ${selected ? 'border-brand-500 bg-brand-600 text-white' : 'border-[#c8c8c2] bg-white text-transparent'}`}><Check size={14} /></span> : null}
+                  <strong className="min-w-0 truncate">{page.label}</strong>
+                </span>
+                <span className="flex shrink-0 items-center gap-2">
+                  <span className="text-xs font-extrabold text-brand-700">{page.score}</span>
+                  {onDismiss ? (
+                    <span
+                      className="grid h-7 w-7 place-items-center rounded-md text-[#636360] transition hover:bg-white hover:text-[#111110]"
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        onDismiss(page.url);
+                      }}
+                      role="button"
+                      tabIndex={0}
+                      title="Dismiss recommendation"
+                      onKeyDown={(event) => {
+                        if (event.key === 'Enter' || event.key === ' ') {
+                          event.preventDefault();
+                          event.stopPropagation();
+                          onDismiss(page.url);
+                        }
+                      }}
+                    >
+                      <X size={14} />
+                    </span>
+                  ) : null}
+                </span>
+              </div>
+              <p className="mt-1 line-clamp-2 text-xs font-semibold text-[#636360]">{page.reason}</p>
+            </>
+          );
+          return interactive ? (
+            <button className={`w-full min-w-0 rounded-lg p-3 text-left transition ${selected ? 'bg-[#ebf2ff] ring-1 ring-brand-100' : 'bg-[#f5f5f2] hover:bg-[#efefeb]'}`} key={page.url} onClick={() => onToggle?.(page.url)} type="button">
+              {content}
+            </button>
+          ) : (
+            <div className="min-w-0 rounded-lg bg-[#f5f5f2] p-3" key={page.url}>
+              {content}
+            </div>
+          );
+        })}
       </div>
     </div>
   );
@@ -202,15 +348,20 @@ function PageList({ title, pages }: { title: string; pages: MonitoringProfile['r
 
 function MetricCard({ icon: Icon, label, value }: { icon: typeof Activity; label: string; value: number }) {
   return (
-    <section className="rounded-lg border border-[#eaeae6] bg-white p-5 shadow-panel">
-      <div className="mb-5 flex items-center justify-between gap-3"><span className="text-sm font-bold text-[#636360]">{label}</span><span className="grid h-10 w-10 place-items-center rounded-full bg-[#ebf2ff] text-brand-700"><Icon size={18} /></span></div>
+    <section className="min-w-0 rounded-lg border border-[#eaeae6] bg-white p-5 shadow-panel">
+      <div className="mb-5 flex min-w-0 items-center justify-between gap-3"><span className="min-w-0 truncate text-sm font-bold text-[#636360]">{label}</span><span className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-[#ebf2ff] text-brand-700"><Icon size={18} /></span></div>
       <strong className="text-4xl font-extrabold">{value}</strong>
     </section>
   );
 }
 
 function EmptyState({ title, body }: { title: string; body: string }) {
-  return <div className="rounded-lg bg-[#f5f5f2] p-4"><strong>{title}</strong><p className="mt-1 text-sm font-semibold text-[#636360]">{body}</p></div>;
+  return <div className="min-w-0 rounded-lg bg-[#f5f5f2] p-4"><strong>{title}</strong><p className="mt-1 break-words text-sm font-semibold text-[#636360]">{body}</p></div>;
+}
+
+function pendingRecommendations(profile: MonitoringProfile) {
+  const monitoredUrls = new Set(profile.monitoredPages.map((page) => page.url));
+  return profile.recommendedPages.filter((page) => !monitoredUrls.has(page.url));
 }
 
 function groupEvents(events: ChangeEvent[]) {
@@ -240,6 +391,13 @@ function formatPreset(value: string) {
 
 function formatValue(value: unknown) {
   if (!value) return 'No previous value';
+  if (isHashOnly(value)) return 'Content fingerprint changed. No readable snapshot was stored for this older event.';
   if (typeof value === 'string') return value;
   return JSON.stringify(value, null, 2);
+}
+
+function isHashOnly(value: unknown) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  const keys = Object.keys(value as Record<string, unknown>);
+  return keys.length === 1 && keys[0] === 'hash';
 }

@@ -3,6 +3,7 @@ import { ChangeEvent } from '../models/ChangeEvent.js';
 import { Page } from '../models/Page.js';
 import { PageChange } from '../models/PageChange.js';
 import { domainFromUrl } from '../utils/url.js';
+import { decryptPageDocument, encryptChangePayload } from './changePayloadCrypto.js';
 
 export async function detectPageChanges(input: {
   deviceId: string;
@@ -25,37 +26,41 @@ export async function detectPageChanges(input: {
   ).lean();
 
   if (!current) return [];
+  const previousPage = decryptPageDocument(previous);
+  const currentPage = decryptPageDocument(current);
 
   const changes: Array<{ type: string; severity: 'low' | 'medium' | 'high'; data?: Record<string, unknown>; oldValue?: unknown; newValue?: unknown; reason?: string }> = [];
   if (previous.contentHash !== input.contentHash) {
+    const contentDiff = summarizeContentChange(previousPage.content?.text || '', currentPage.content?.text || '');
     changes.push({
       type: 'content_changed',
       severity: 'medium',
-      oldValue: { hash: previous.contentHash },
-      newValue: { hash: input.contentHash },
+      data: contentDiff,
+      oldValue: { excerpt: contentDiff.beforeExcerpt },
+      newValue: { excerpt: contentDiff.afterExcerpt },
       reason: 'Page body content changed since the previous crawl.'
     });
   }
 
-  const newEmails = (current.emails || []).filter((email) => !(previous.emails || []).includes(email));
+  const newEmails = (currentPage.emails || []).filter((email) => !(previousPage.emails || []).includes(email));
   if (newEmails.length > 0) changes.push({ type: 'new_email', severity: 'high', data: { emails: newEmails }, newValue: { emails: newEmails }, reason: 'New contact emails were discovered.' });
 
-  const removedEmails = (previous.emails || []).filter((email) => !(current.emails || []).includes(email));
+  const removedEmails = (previousPage.emails || []).filter((email) => !(currentPage.emails || []).includes(email));
   if (removedEmails.length > 0) changes.push({ type: 'removed_email', severity: 'medium', data: { emails: removedEmails }, oldValue: { emails: removedEmails }, reason: 'Previously discovered emails disappeared from the page.' });
 
-  if (current.metadata?.title !== previous.metadata?.title) {
+  if (currentPage.metadata?.title !== previousPage.metadata?.title) {
     changes.push({
       type: 'metadata_changed',
       severity: 'low',
-      data: { field: 'title', from: previous.metadata?.title, to: current.metadata?.title },
-      oldValue: { title: previous.metadata?.title },
-      newValue: { title: current.metadata?.title },
+      data: { field: 'title', from: previousPage.metadata?.title, to: currentPage.metadata?.title },
+      oldValue: { title: previousPage.metadata?.title },
+      newValue: { title: currentPage.metadata?.title },
       reason: 'The page title changed.'
     });
   }
 
-  const previousHeadings = previous.content?.headings || [];
-  const currentHeadings = current.content?.headings || [];
+  const previousHeadings = previousPage.content?.headings || [];
+  const currentHeadings = currentPage.content?.headings || [];
   if (JSON.stringify(previousHeadings) !== JSON.stringify(currentHeadings)) {
     changes.push({
       type: 'heading_changed',
@@ -66,7 +71,7 @@ export async function detectPageChanges(input: {
     });
   }
 
-  const priceChange = detectPriceChange(previous.content?.text || '', current.content?.text || '');
+  const priceChange = detectPriceChange(previousPage.content?.text || '', currentPage.content?.text || '');
   if (priceChange) {
     changes.push({
       type: 'price_changed',
@@ -78,18 +83,18 @@ export async function detectPageChanges(input: {
     });
   }
 
-  const socialChange = diffArrayValues(Object.values(previous.social || {}).flat().map(String), Object.values(current.social || {}).flat().map(String));
+  const socialChange = diffArrayValues(Object.values(previousPage.social || {}).flat().map(String), Object.values(currentPage.social || {}).flat().map(String));
   if (socialChange.added.length > 0 || socialChange.removed.length > 0) {
     changes.push({ type: 'social_changed', severity: 'medium', data: socialChange, oldValue: { social: socialChange.removed }, newValue: { social: socialChange.added }, reason: 'Social profiles changed.' });
   }
 
-  const techChange = diffArrayValues((previous.techStack || []).map(String), (current.techStack || []).map(String));
+  const techChange = diffArrayValues((previousPage.techStack || []).map(String), (currentPage.techStack || []).map(String));
   if (techChange.added.length > 0 || techChange.removed.length > 0) {
     changes.push({ type: 'tech_stack_changed', severity: 'medium', data: techChange, oldValue: { techStack: techChange.removed }, newValue: { techStack: techChange.added }, reason: 'Technology signatures changed.' });
   }
 
-  if (Math.abs((current.score || 0) - (previous.score || 0)) >= 20) {
-    changes.push({ type: 'score_changed', severity: 'medium', data: { from: previous.score || 0, to: current.score || 0 }, oldValue: { score: previous.score || 0 }, newValue: { score: current.score || 0 }, reason: 'The page importance score moved materially.' });
+  if (Math.abs((currentPage.score || 0) - (previousPage.score || 0)) >= 20) {
+    changes.push({ type: 'score_changed', severity: 'medium', data: { from: previousPage.score || 0, to: currentPage.score || 0 }, oldValue: { score: previousPage.score || 0 }, newValue: { score: currentPage.score || 0 }, reason: 'The page importance score moved materially.' });
   }
 
   if (changes.length === 0) return [];
@@ -103,7 +108,7 @@ export async function detectPageChanges(input: {
     crawlId: input.crawlId,
     changeType: toLegacyChangeType(change.type),
     severity: change.severity,
-    data: change.data || {},
+    data: encryptChangePayload(change.data || {}),
     detectedAt: new Date()
   })), { ordered: false });
 
@@ -115,9 +120,9 @@ export async function detectPageChanges(input: {
     crawlId: input.crawlId,
     eventType: change.type,
     severity: change.severity,
-    oldValue: change.oldValue || null,
-    newValue: change.newValue || null,
-    diff: change.data || {},
+    oldValue: encryptChangePayload(change.oldValue || null),
+    newValue: encryptChangePayload(change.newValue || null),
+    diff: encryptChangePayload(change.data || {}),
     reason: change.reason || '',
     detectedAt: new Date()
   })), { ordered: false }).catch(() => undefined);
@@ -144,6 +149,43 @@ function detectPriceChange(previousText: string, currentText: string) {
   const current = extractPrices(currentText);
   const diff = diffArrayValues(previous, current);
   return diff.added.length > 0 || diff.removed.length > 0 ? diff : null;
+}
+
+function summarizeContentChange(previousText: string, currentText: string) {
+  const before = normalizeText(previousText);
+  const after = normalizeText(currentText);
+  const previousSentences = splitSentences(before);
+  const currentSentences = splitSentences(after);
+  const sentenceDiff = diffArrayValues(previousSentences, currentSentences);
+
+  return {
+    beforeExcerpt: excerptAroundDifference(before, sentenceDiff.removed[0] || ''),
+    afterExcerpt: excerptAroundDifference(after, sentenceDiff.added[0] || ''),
+    removedText: sentenceDiff.removed.slice(0, 5),
+    addedText: sentenceDiff.added.slice(0, 5)
+  };
+}
+
+function normalizeText(value: string) {
+  return value.replace(/\s+/g, ' ').trim();
+}
+
+function splitSentences(value: string) {
+  return value
+    .split(/(?<=[.!?])\s+|\n+/)
+    .map((item) => item.trim())
+    .filter((item) => item.length >= 24)
+    .slice(0, 200);
+}
+
+function excerptAroundDifference(text: string, needle: string) {
+  if (!text) return '';
+  if (!needle) return text.slice(0, 500);
+  const index = text.toLowerCase().indexOf(needle.toLowerCase());
+  if (index < 0) return text.slice(0, 500);
+  const start = Math.max(0, index - 180);
+  const end = Math.min(text.length, index + needle.length + 180);
+  return `${start > 0 ? '...' : ''}${text.slice(start, end)}${end < text.length ? '...' : ''}`;
 }
 
 function extractPrices(text: string) {

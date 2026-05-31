@@ -150,6 +150,11 @@
   background-color: rgba(59,130,246,0.18);
 }
 
+:root[data-theme="dark"] .bg-\[\#fbfbf8\],
+:root[data-theme="dark"] .change-event-card {
+  background-color: #162033;
+}
+
 :root[data-theme="dark"] .border-\[\#eaeae6\],
 :root[data-theme="dark"] .border-\[\#e4ebe6\],
 :root[data-theme="dark"] .border-\[\#c8c8c2\] {
@@ -302,6 +307,21 @@
   color: #F8FAFC;
 }
 
+:root[data-theme="dark"] .change-event-card {
+  border-color: rgba(255,255,255,0.08);
+  box-shadow: 0 16px 38px rgba(0,0,0,0.20);
+}
+
+:root[data-theme="dark"] .change-diff-card {
+  background-color: #0f172a;
+  border: 1px solid rgba(255,255,255,0.06);
+  color: #F8FAFC;
+}
+
+:root[data-theme="dark"] .change-diff-card span {
+  color: #CBD5E1;
+}
+
 :root[data-theme="dark"] ::selection {
   background: rgba(59,130,246,0.35);
   color: #F8FAFC;
@@ -386,23 +406,22 @@ a:active {
   z-index: 2147483647;
   opacity: 0;
   background:
-    radial-gradient(circle at 76% 14%, rgba(96,165,250,0.34), transparent 28rem),
-    linear-gradient(115deg, transparent 0%, rgba(59,130,246,0.18) 32%, rgba(96,165,250,0.44) 48%, rgba(59,130,246,0.14) 62%, transparent 100%);
-  mix-blend-mode: screen;
-  animation: theme-wash 720ms var(--ease-out-expo) both;
+    radial-gradient(circle at 50% 18%, rgba(96,165,250,0.22), transparent 22rem),
+    linear-gradient(180deg, rgba(59,130,246,0.08), transparent 58%);
+  backdrop-filter: saturate(1.08);
+  animation: theme-wash 520ms var(--ease-out-expo) both;
 }
 
 .theme-transition-wash-light {
   background:
-    radial-gradient(circle at 76% 14%, rgba(10,110,255,0.22), transparent 28rem),
-    linear-gradient(115deg, transparent 0%, rgba(10,110,255,0.10) 30%, rgba(255,255,255,0.72) 50%, rgba(96,165,250,0.16) 66%, transparent 100%);
-  mix-blend-mode: normal;
+    radial-gradient(circle at 50% 18%, rgba(10,110,255,0.16), transparent 22rem),
+    linear-gradient(180deg, rgba(255,255,255,0.52), rgba(255,255,255,0.10) 48%, transparent 100%);
 }
 
 .theme-transition-wash-dark {
   background:
-    radial-gradient(circle at 76% 14%, rgba(96,165,250,0.36), transparent 28rem),
-    linear-gradient(115deg, transparent 0%, rgba(59,130,246,0.12) 30%, rgba(96,165,250,0.36) 50%, rgba(11,18,32,0.44) 68%, transparent 100%);
+    radial-gradient(circle at 50% 18%, rgba(96,165,250,0.24), transparent 22rem),
+    linear-gradient(180deg, rgba(11,18,32,0.18), rgba(11,18,32,0.36) 54%, transparent 100%);
 }
 
 @keyframes page-enter {
@@ -432,23 +451,20 @@ a:active {
 @keyframes theme-wash {
   0% {
     opacity: 0;
-    clip-path: inset(0 100% 0 0);
+    transform: scale(0.985);
+    filter: blur(10px);
+  }
+
+  36% {
+    opacity: 0.74;
+    transform: scale(1);
     filter: blur(0);
-  }
-
-  18% {
-    opacity: 1;
-  }
-
-  58% {
-    opacity: 0.82;
-    clip-path: inset(0 0 0 0);
   }
 
   100% {
     opacity: 0;
-    clip-path: inset(0 0 0 100%);
-    filter: blur(10px);
+    transform: scale(1.01);
+    filter: blur(12px);
   }
 }
 

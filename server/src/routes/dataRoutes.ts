@@ -7,6 +7,7 @@ import type { IPage } from '../models/Page.js';
 import { SOCIAL_KEYS } from '../extractors/social.js';
 import { config } from '../config/index.js';
 import { stableCacheKey, withCache } from '../utils/cache.js';
+import { decryptPageDocument } from '../services/changePayloadCrypto.js';
 
 const COMPACT_PAGE_PROJECTION = {
   content: 0
@@ -54,7 +55,7 @@ export function dataRouter() {
       const limit = parseLimit(req.query.limit, 25, 100);
       const query: FilterQuery<IPage> = { $and: conditions };
       const includeFull = req.query.include === 'full';
-      const canCache = !req.query.cursor;
+      const canCache = !req.query.cursor && !includeFull;
       const cacheKey = stableCacheKey(`data:${req.deviceId}`, {
         ...req.query,
         include: includeFull ? 'full' : 'compact'
@@ -69,7 +70,7 @@ export function dataRouter() {
             .sort({ crawledAt: -1, _id: -1 })
             .limit(limit + 1)
             .lean();
-          return toCursorPage(pages, limit);
+          return toCursorPage(includeFull ? pages.map((page) => decryptPageDocument(page)) : pages, limit);
         } catch (error) {
           if (!q || !isMissingTextIndexError(error)) throw error;
           const fallbackQuery: FilterQuery<IPage> = {
@@ -79,7 +80,7 @@ export function dataRouter() {
             .sort({ crawledAt: -1, _id: -1 })
             .limit(limit + 1)
             .lean();
-          return toCursorPage(pages, limit);
+          return toCursorPage(includeFull ? pages.map((page) => decryptPageDocument(page)) : pages, limit);
         }
       }
     } catch (error) {

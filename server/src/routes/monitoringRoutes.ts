@@ -14,6 +14,8 @@ import {
   refreshRecommendedPages,
   type MonitoringType
 } from '../services/monitoringProfileService.js';
+import { invalidateWorkspaceReads } from '../services/cacheInvalidation.js';
+import { decryptChangeEvent } from '../services/changePayloadCrypto.js';
 import { getWorkspaceSettings } from '../services/workspaceSettingsService.js';
 
 export function monitoringRouter({ crawlManager }: { crawlManager: CrawlManager }) {
@@ -32,18 +34,19 @@ export function monitoringRouter({ crawlManager }: { crawlManager: CrawlManager 
           ChangeEvent.find({ deviceId: req.deviceId }).sort({ detectedAt: -1 }).limit(100).lean()
         ]);
 
-        const unreadEvents = events.filter((event) => !event.readAt);
+        const decryptedEvents = events.map((event) => decryptChangeEvent(event));
+        const unreadEvents = decryptedEvents.filter((event) => !event.readAt);
         return {
           activeCrawls,
           recentAlerts: dedupeAlerts(recentAlerts).slice(0, 25),
           domains,
           profiles,
-          changeFeed: events,
+          changeFeed: decryptedEvents,
           counts: {
-            changesToday: events.filter((event) => new Date(event.detectedAt).getTime() >= since.getTime()).length,
-            newPages: events.filter((event) => event.eventType === 'new_page').length,
-            newEmails: events.filter((event) => event.eventType === 'new_email').length,
-            dnsChanges: events.filter((event) => event.eventType === 'dns_changed').length,
+            changesToday: decryptedEvents.filter((event) => new Date(event.detectedAt).getTime() >= since.getTime()).length,
+            newPages: decryptedEvents.filter((event) => event.eventType === 'new_page').length,
+            newEmails: decryptedEvents.filter((event) => event.eventType === 'new_email').length,
+            dnsChanges: decryptedEvents.filter((event) => event.eventType === 'dns_changed').length,
             unread: unreadEvents.length
           },
           health: {
@@ -83,6 +86,7 @@ export function monitoringRouter({ crawlManager }: { crawlManager: CrawlManager 
       }, req.deviceId);
       profile.discoveryCrawlId = job._id;
       await profile.save();
+      await invalidateWorkspaceReads(req.deviceId).catch(() => undefined);
       res.status(201).json({ profile, discoveryCrawl: job });
     } catch (error) {
       next(error);
@@ -99,7 +103,7 @@ export function monitoringRouter({ crawlManager }: { crawlManager: CrawlManager 
         ChangeEvent.find({ deviceId: req.deviceId, domain }).sort({ detectedAt: -1 }).limit(100).lean(),
         DomainProfile.findOne({ deviceId: req.deviceId, domain }).lean()
       ]);
-      res.json({ profile, events, domain: domainProfile });
+      res.json({ profile, events: events.map((event) => decryptChangeEvent(event)), domain: domainProfile });
     } catch (error) {
       next(error);
     }
@@ -107,7 +111,7 @@ export function monitoringRouter({ crawlManager }: { crawlManager: CrawlManager 
 
   router.patch('/profiles/:id', async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const allowed = ['monitoredPages', 'schedule', 'sensitivity', 'enabled'];
+      const allowed = ['monitoredPages', 'recommendedPages', 'schedule', 'sensitivity', 'enabled'];
       const patch = Object.fromEntries(Object.entries(req.body || {}).filter(([key]) => allowed.includes(key)));
       const profile = await MonitoringProfile.findOneAndUpdate(
         { _id: req.params.id, deviceId: req.deviceId },
@@ -115,6 +119,7 @@ export function monitoringRouter({ crawlManager }: { crawlManager: CrawlManager 
         { new: true }
       );
       if (!profile) return res.status(404).json({ message: 'Monitoring profile not found' });
+      await invalidateWorkspaceReads(req.deviceId).catch(() => undefined);
       res.json(profile);
     } catch (error) {
       next(error);
@@ -125,6 +130,7 @@ export function monitoringRouter({ crawlManager }: { crawlManager: CrawlManager 
     try {
       const profile = await acceptRecommendations(req.deviceId, String(req.params.id));
       if (!profile) return res.status(404).json({ message: 'Monitoring profile not found' });
+      await invalidateWorkspaceReads(req.deviceId).catch(() => undefined);
       res.json(profile);
     } catch (error) {
       next(error);
@@ -139,7 +145,8 @@ export function monitoringRouter({ crawlManager }: { crawlManager: CrawlManager 
         { new: true }
       );
       if (!event) return res.status(404).json({ message: 'Change event not found' });
-      res.json(event);
+      await invalidateWorkspaceReads(req.deviceId).catch(() => undefined);
+      res.json(decryptChangeEvent(event.toObject()));
     } catch (error) {
       next(error);
     }

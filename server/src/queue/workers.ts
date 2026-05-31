@@ -5,6 +5,7 @@ import { queueNames, type QueueBundle } from './queues.js';
 import { config } from '../config/index.js';
 import { CrawlJob } from '../models/CrawlJob.js';
 import { processCrawlPage } from '../services/crawlPageProcessor.js';
+import { enqueueDueMonitoringChecks, processMonitoringCheck } from '../services/monitoringSchedulerService.js';
 import { discoverSitemapUrls } from '../crawler/sitemap.js';
 import { withCrawlConfigDefaults } from '../crawler/config.js';
 import type { CrawlConfig } from '../types.js';
@@ -18,6 +19,7 @@ import { crawlPageJobId } from './jobIds.js';
 export interface WorkerBundle {
   crawlWorker: Worker;
   crawlPageWorker: Worker;
+  monitoringWorker: Worker;
   domainWorker: Worker;
   close: () => Promise<void>;
 }
@@ -95,6 +97,15 @@ export function startQueueWorkers(queues: QueueBundle): WorkerBundle {
     }
   );
 
+  const monitoringWorker = new Worker(
+    queueNames.monitoringChecks,
+    async (job) => processMonitoringCheck(job.data, queues),
+    {
+      connection,
+      concurrency: config.monitoringChecksConcurrency
+    }
+  );
+
   const domainWorker = new Worker(
     queueNames.domainEnrichment,
     async (job) => {
@@ -131,6 +142,10 @@ export function startQueueWorkers(queues: QueueBundle): WorkerBundle {
       }).catch(() => undefined);
     }
   });
+  monitoringWorker.on('failed', async (job, error) => {
+    logger.error({ jobId: job?.id, profileId: job?.data?.profileId, deviceId: job?.data?.deviceId, err: error.message }, 'Monitoring check job failed');
+    incrementMetric('webintel_queue_jobs_failed_total', 'Total failed BullMQ jobs', { queue: queueNames.monitoringChecks });
+  });
   domainWorker.on('failed', async (job, error) => {
     logger.error({ jobId: job?.id, err: error.message }, 'Domain enrichment job failed');
     incrementMetric('webintel_queue_jobs_failed_total', 'Total failed BullMQ jobs', { queue: queueNames.domainEnrichment });
@@ -140,18 +155,33 @@ export function startQueueWorkers(queues: QueueBundle): WorkerBundle {
     void Promise.all([
       updateQueueDepthMetric(queues, 'crawl-jobs', queueNames.crawlJobs),
       updateQueueDepthMetric(queues, 'crawl-pages', queueNames.crawlPages),
+      updateQueueDepthMetric(queues, 'monitoring-checks', queueNames.monitoringChecks),
       updateQueueDepthMetric(queues, 'domain-enrichment', queueNames.domainEnrichment)
     ]);
   }, 10_000);
   metricsTimer.unref();
 
+  const monitoringSchedulerTimer = setInterval(() => {
+    void enqueueDueMonitoringChecks(queues).then((result) => {
+      if (result.queued > 0) logger.info(result, 'Queued due monitoring checks');
+    }).catch((error) => {
+      logger.warn({ err: error.message }, 'Monitoring scheduler scan failed');
+    });
+  }, config.monitoringSchedulerIntervalMs);
+  monitoringSchedulerTimer.unref();
+  void enqueueDueMonitoringChecks(queues).catch((error) => {
+    logger.warn({ err: error.message }, 'Initial monitoring scheduler scan failed');
+  });
+
   return {
     crawlWorker,
     crawlPageWorker,
+    monitoringWorker,
     domainWorker,
     close: async () => {
-      await Promise.all([crawlWorker.close(), crawlPageWorker.close(), domainWorker.close()]);
+      await Promise.all([crawlWorker.close(), crawlPageWorker.close(), monitoringWorker.close(), domainWorker.close()]);
       clearInterval(metricsTimer);
+      clearInterval(monitoringSchedulerTimer);
     }
   };
 }

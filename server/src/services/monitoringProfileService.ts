@@ -66,7 +66,7 @@ export async function acceptRecommendations(deviceId: string, profileId: string)
   const pages = (profile.recommendedPages || []).map((page) => ({ ...page, enabled: true }));
   return MonitoringProfile.findOneAndUpdate(
     { _id: profileId, deviceId },
-    { $set: { monitoredPages: pages } },
+    { $set: { monitoredPages: pages, recommendedPages: [] } },
     { new: true }
   );
 }

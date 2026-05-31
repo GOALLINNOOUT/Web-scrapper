@@ -12,6 +12,7 @@ import { getCircuitBreaker } from '../utils/circuitBreaker.js';
 import { domainFromUrl, isLikelyPageUrl, isSameDomain } from '../utils/url.js';
 import { retentionDate } from '../utils/retention.js';
 import { detectPageChanges } from './changeDetectionService.js';
+import { decryptPageDocument, encryptPageContent, shouldEncryptStoredPageText } from './changePayloadCrypto.js';
 import { rebuildDomainProfile } from '../intelligence/domain.service.js';
 import type { CrawlConfig } from '../types.js';
 import { createDailyEmailAlert } from './alertService.js';
@@ -166,7 +167,7 @@ export async function processCrawlPage(data: CrawlPageJobData, queues?: QueueBun
           emails: extracted.emails,
           social: extracted.social,
           techStack: extracted.techStack,
-          content: extracted.content,
+          content: encryptPageContent(extracted.content),
           classification: extracted.classification,
           score: extracted.score,
           searchText: buildSearchText(data.url, domain, extracted),
@@ -370,17 +371,18 @@ function buildSearchText(url: string, domain: string, extracted: Awaited<ReturnT
     ...extracted.links,
     ...Object.values(extracted.social).flat(),
     ...extracted.techStack,
-    extracted.content.text,
+    shouldEncryptStoredPageText() ? '' : extracted.content.text,
     extracted.classification.pageType
   ].join(' ');
 }
 
 function toLivePage(page: { toObject?: () => Record<string, unknown> }) {
   const value = typeof page.toObject === 'function' ? page.toObject() : page as Record<string, unknown>;
+  const decrypted = decryptPageDocument(value as { content?: { text?: string } }) as Record<string, unknown>;
   return {
-    ...value,
-    _id: String(value._id || ''),
-    crawlId: String(value.crawlId || ''),
-    parentPageId: value.parentPageId ? String(value.parentPageId) : null
+    ...decrypted,
+    _id: String(decrypted._id || ''),
+    crawlId: String(decrypted.crawlId || ''),
+    parentPageId: decrypted.parentPageId ? String(decrypted.parentPageId) : null
   };
 }

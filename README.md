@@ -17,7 +17,7 @@ The API runs on `http://localhost:4000` and the dashboard runs on `http://localh
 
 - API: clustered Express process. Set `NODE_ENV=production` and `WEB_WORKERS` to fork API workers.
 - Workers: run `npm run dev:worker` locally or `npm run start:worker --workspace server` in production.
-- Redis: set `REDIS_URL` to enable BullMQ page-level crawl workers, rate limiting, robots cache, retries, and dead-letter retention.
+- Redis: set `REDIS_URL` to enable BullMQ page-level crawl workers, scheduled monitoring checks, rate limiting, robots cache, retries, and dead-letter retention.
 - MongoDB: models include compound indexes for device/workspace, domain, classification, score, tech stack, crawl time, and contact discovery.
 - Security: crawl targets pass DNS-backed SSRF checks before network fetches; private/local targets are rejected.
 - Edge: use your hosting provider's generated HTTPS API URL. The React frontend can stay on Vercel Free without a custom domain.
@@ -85,6 +85,8 @@ REDIS_URL=redis://...
 TARGET_CRAWL_PAGES_PER_SECOND=50
 CRAWL_PAGE_WORKER_RATE=50
 CRAWL_PAGE_WORKER_CONCURRENCY=200
+MONITORING_CHECKS_CONCURRENCY=4
+MONITORING_SCHEDULER_INTERVAL_MS=60000
 HTTP_AGENT_MAX_SOCKETS=200
 CRAWLER_DOMAIN_RATE_PER_SECOND=5
 CRAWLER_DOMAIN_CONCURRENCY=4
@@ -102,7 +104,33 @@ CRAWLER_RENDER_QUEUE_MAX=500
 CRAWLER_BLOCK_RENDER_ASSETS=true
 ```
 
+Set `MONITORING_ENCRYPTION_KEY` to encrypt monitoring before/after/diff payloads and stored page text snapshots in MongoDB while still letting the API decrypt them for the dashboard:
+
+```bash
+MONITORING_ENCRYPTION_KEY=base64-encoded-32-byte-key
+```
+
+Generate a key with:
+
+```bash
+node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"
+```
+
+When this key is set, `Page.content.text` is stored as AES-256-GCM ciphertext. The crawler still stores `contentHash`, URL, domain, metadata, headings, emails, links, social profiles, tech stack, and scores as normal fields. Body-text search is disabled for newly encrypted page text because raw body text is no longer copied into `searchText`.
+
 Watch `/metrics` for `webintel_pages_crawled_total`, `webintel_page_fetch_mode_total`, `webintel_fetch_duration_seconds`, `webintel_render_duration_seconds`, `webintel_render_queue_depth`, `webintel_render_active`, `webintel_domain_throttle_wait_seconds`, and `webintel_queue_depth` while tuning workers.
+
+## Scheduled Monitoring
+
+Manual crawls and monitoring checks are intentionally separate:
+
+- Manual crawl: user starts a crawl from Overview/Crawls. It can discover links, follow depth, use sitemaps, and expand into many pages.
+- Monitoring profile: user adds a domain and accepts recommended pages. The profile stores enabled monitored URLs and a schedule: `12h`, `daily`, `weekly`, or `monthly`.
+- Scheduler: worker processes scan due profiles every `MONITORING_SCHEDULER_INTERVAL_MS` and enqueue `monitoring-checks` jobs in BullMQ.
+- Monitoring check: the worker creates a crawl job for only the monitored URLs, with `maxDepth: 0` and sitemap discovery disabled. This revisits known important pages without doing a full crawl.
+- Change detection: normal page workers fetch those URLs and compare against previous crawls, then write `ChangeEvent` records for Monitoring.
+
+This means daily/weekly/monthly monitoring keeps running independently of manual crawling as long as at least one worker process is running with `REDIS_URL` and `MONGODB_URI`.
 
 Docker deployment assets live in `docker/`.
 

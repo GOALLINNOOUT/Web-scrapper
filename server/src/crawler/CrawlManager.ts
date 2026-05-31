@@ -27,6 +27,7 @@ import { updateCrawlSummaryForPage, rebuildCrawlSummary } from '../services/craw
 import { invalidateCrawlReads, invalidateDomainReads, invalidateWorkspaceReads } from '../services/cacheInvalidation.js';
 import { publishLiveEvent } from '../services/liveEvents.js';
 import { getWorkspaceSettings } from '../services/workspaceSettingsService.js';
+import { decryptPageDocument, encryptPageContent, shouldEncryptStoredPageText } from '../services/changePayloadCrypto.js';
 
 function sevenDaysFromNow() {
   return new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
@@ -493,10 +494,10 @@ export class CrawlManager {
             emails,
             social,
             techStack,
-            content,
+            content: encryptPageContent(content),
             classification,
             score,
-            searchText: buildSearchText({ url: item.url, domain: domainFromUrl(item.url), metadata, emails, links, social, contentText: content.text, classification: classification.pageType }),
+            searchText: buildSearchText({ url: item.url, domain: domainFromUrl(item.url), metadata, emails, links, social, contentText: shouldEncryptStoredPageText() ? '' : content.text, classification: classification.pageType }),
             crawledAt: new Date(),
             expiresAt: retentionDate(),
             contentHash: hashContent(extractionHtml),
@@ -624,11 +625,12 @@ function buildSearchText(input: {
 
 function toLivePage(page: { toObject?: () => Record<string, unknown> }) {
   const value = typeof page.toObject === 'function' ? page.toObject() : page as Record<string, unknown>;
+  const decrypted = decryptPageDocument(value as { content?: { text?: string } }) as Record<string, unknown>;
   return {
-    ...value,
-    _id: String(value._id || ''),
-    crawlId: String(value.crawlId || ''),
-    parentPageId: value.parentPageId ? String(value.parentPageId) : null
+    ...decrypted,
+    _id: String(decrypted._id || ''),
+    crawlId: String(decrypted.crawlId || ''),
+    parentPageId: decrypted.parentPageId ? String(decrypted.parentPageId) : null
   };
 }
 

@@ -94,7 +94,7 @@ export function AppShell() {
     <div className="h-screen overflow-hidden bg-[#fafaf8] text-[#111110]">
       <div className={`grid h-screen overflow-hidden bg-[#fafaf8] transition-[grid-template-columns] duration-300 ease-[var(--ease-out-expo)] max-[900px]:grid-cols-1 ${sidebarCollapsed ? 'grid-cols-[88px_minmax(0,1fr)]' : 'grid-cols-[260px_minmax(0,1fr)]'}`}>
         <Sidebar collapsed={sidebarCollapsed} onToggle={() => setSidebarCollapsed((value) => !value)} />
-        <main className="h-screen min-w-0 overflow-y-auto bg-[#fafaf8] px-6 pb-8 pt-0 max-[900px]:h-auto max-[900px]:min-h-screen max-[900px]:px-3.5 max-[900px]:pb-3.5 max-[900px]:pt-0">
+        <main className="h-screen min-w-0 overflow-x-hidden overflow-y-auto bg-[#fafaf8] px-6 pb-8 pt-0 max-[900px]:h-auto max-[900px]:min-h-screen max-[900px]:px-3.5 max-[900px]:pb-3.5 max-[900px]:pt-0">
           <header className="sticky top-0 z-30 mb-6 grid min-h-20 grid-cols-[minmax(280px,610px)_auto] items-center justify-between gap-4 border-b border-[#eaeae6] bg-[#fafaf8]/90 p-4 backdrop-blur-xl max-[760px]:grid-cols-1">
             <div className="relative flex h-[52px] w-full items-center gap-3 rounded-lg border border-[#eaeae6] bg-white px-4 shadow-sm transition focus-within:border-[#c8c8c2] focus-within:bg-white focus-within:shadow-[0_0_0_3px_rgba(10,110,255,0.20)]">
               <Search className="text-[#636360]" size={18} />

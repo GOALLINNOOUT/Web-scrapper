@@ -125,7 +125,7 @@ export const api = {
     body: JSON.stringify(payload)
   }),
   getMonitoringProfile: (domain: string) => request<{ profile: MonitoringProfile; events: ChangeEvent[]; domain?: DomainProfile }>(`/monitoring/profiles/${encodeURIComponent(domain)}`),
-  updateMonitoringProfile: (id: string, payload: Partial<Pick<MonitoringProfile, 'monitoredPages' | 'schedule' | 'sensitivity' | 'enabled'>>) => request<MonitoringProfile>(`/monitoring/profiles/${id}`, {
+  updateMonitoringProfile: (id: string, payload: Partial<Pick<MonitoringProfile, 'monitoredPages' | 'recommendedPages' | 'schedule' | 'sensitivity' | 'enabled'>>) => request<MonitoringProfile>(`/monitoring/profiles/${id}`, {
     method: 'PATCH',
     body: JSON.stringify(payload)
   }),

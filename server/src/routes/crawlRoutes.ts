@@ -8,6 +8,7 @@ import { CrawlSummary } from '../models/CrawlSummary.js';
 import { rebuildCrawlSummary } from '../services/crawlSummaryService.js';
 import { config } from '../config/index.js';
 import { stableCacheKey, withCache } from '../utils/cache.js';
+import { decryptPageDocument } from '../services/changePayloadCrypto.js';
 
 const COMPACT_PAGE_PROJECTION = {
   content: 0
@@ -65,14 +66,15 @@ export function crawlRouter({ crawlManager }: { crawlManager: CrawlManager }) {
         cursor: req.query.cursor || '',
         include: includeFull ? 'full' : 'compact'
       });
-      const resultPromise = withCache(cacheKey, config.cacheTtlDataMs, async () => {
+      const resultPromise = (includeFull ? readResults() : withCache(cacheKey, config.cacheTtlDataMs, readResults));
+      async function readResults() {
         const pages = await Page.find(query, includeFull ? undefined : COMPACT_PAGE_PROJECTION)
           .sort({ crawledAt: -1, _id: -1 })
           .limit(limit + 1)
           .lean();
 
-        return toCursorPage(pages, limit);
-      });
+        return toCursorPage(includeFull ? pages.map((page) => decryptPageDocument(page)) : pages, limit);
+      }
       const [job, result] = await Promise.all([
         CrawlJob.exists({ _id: req.params.id, deviceId: req.deviceId }),
         resultPromise
