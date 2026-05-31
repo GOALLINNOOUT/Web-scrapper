@@ -20,6 +20,7 @@ const configSchema = new mongoose.Schema({
   maxPages: { type: Number, default: 100 },
   maxDepth: { type: Number, default: 2 },
   sameDomainOnly: { type: Boolean, default: true },
+  respectRobots: { type: Boolean, default: false },
   concurrency: { type: Number, default: 5 },
   discovery: { type: discoverySchema, default: () => ({}) },
   extract: { type: extractSchema, default: () => ({}) },

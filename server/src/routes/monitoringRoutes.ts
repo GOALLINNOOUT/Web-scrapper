@@ -1,37 +1,145 @@
 import { Router } from 'express';
 import type { NextFunction, Request, Response } from 'express';
 import { AlertEvent } from '../models/AlertEvent.js';
+import { ChangeEvent } from '../models/ChangeEvent.js';
 import { CrawlJob } from '../models/CrawlJob.js';
 import { DomainProfile } from '../models/DomainProfile.js';
+import { MonitoringProfile } from '../models/MonitoringProfile.js';
+import type { CrawlManager } from '../crawler/CrawlManager.js';
 import { config } from '../config/index.js';
 import { withCache } from '../utils/cache.js';
+import {
+  acceptRecommendations,
+  createMonitoringProfile,
+  refreshRecommendedPages,
+  type MonitoringType
+} from '../services/monitoringProfileService.js';
+import { getWorkspaceSettings } from '../services/workspaceSettingsService.js';
 
-export function monitoringRouter() {
+export function monitoringRouter({ crawlManager }: { crawlManager: CrawlManager }) {
   const router = Router();
 
   router.get('/', async (req: Request, res: Response, next: NextFunction) => {
     try {
       const payload = await withCache(`monitoring:${req.deviceId}`, config.cacheTtlMonitoringMs, async () => {
         const since = new Date(Date.now() - 24 * 60 * 60 * 1000);
-        const [activeCrawls, recentAlerts, domains, failedCrawls] = await Promise.all([
+        const [activeCrawls, recentAlerts, domains, failedCrawls, profiles, events] = await Promise.all([
           CrawlJob.find({ deviceId: req.deviceId, status: { $in: ['queued', 'running', 'paused'] } }).sort({ createdAt: -1 }).limit(25).lean(),
           AlertEvent.find({ deviceId: req.deviceId }).sort({ createdAt: -1 }).limit(100).lean(),
           DomainProfile.find({ deviceId: req.deviceId }).sort({ lastCrawledAt: -1 }).limit(25).lean(),
-          CrawlJob.countDocuments({ deviceId: req.deviceId, status: 'failed', updatedAt: { $gte: since } })
+          CrawlJob.countDocuments({ deviceId: req.deviceId, status: 'failed', updatedAt: { $gte: since } }),
+          MonitoringProfile.find({ deviceId: req.deviceId }).sort({ updatedAt: -1 }).limit(100).lean(),
+          ChangeEvent.find({ deviceId: req.deviceId }).sort({ detectedAt: -1 }).limit(100).lean()
         ]);
 
+        const unreadEvents = events.filter((event) => !event.readAt);
         return {
           activeCrawls,
           recentAlerts: dedupeAlerts(recentAlerts).slice(0, 25),
           domains,
+          profiles,
+          changeFeed: events,
+          counts: {
+            changesToday: events.filter((event) => new Date(event.detectedAt).getTime() >= since.getTime()).length,
+            newPages: events.filter((event) => event.eventType === 'new_page').length,
+            newEmails: events.filter((event) => event.eventType === 'new_email').length,
+            dnsChanges: events.filter((event) => event.eventType === 'dns_changed').length,
+            unread: unreadEvents.length
+          },
           health: {
             activeCrawls: activeCrawls.length,
-            monitoredDomains: domains.length,
+            monitoredDomains: profiles.length || domains.length,
             failedCrawls24h: failedCrawls
           }
         };
       });
       res.json(payload);
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.post('/profiles', async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const profile = await createMonitoringProfile({
+        deviceId: req.deviceId,
+        domain: String(req.body?.domain || ''),
+        monitoringType: req.body?.monitoringType as MonitoringType | undefined,
+        schedule: req.body?.schedule,
+        sensitivity: req.body?.sensitivity
+      });
+
+      const settings = await getWorkspaceSettings(req.deviceId).catch(() => null);
+      const crawling = settings?.crawling as { maxPages?: number; defaultDepth?: number; respectRobots?: boolean } | undefined;
+      const job = await crawlManager.createJob({
+        seedUrl: profile.seedUrl,
+        maxPages: Math.min(crawling?.maxPages || 100, 500),
+        maxDepth: crawling?.defaultDepth || 2,
+        respectRobots: crawling?.respectRobots || false,
+        sameDomainOnly: true,
+        schedule: 'none',
+        discovery: { sitemap: true, renderJavaScript: true, renderWhenStaticLinksBelow: 20, includeMetaLinks: true },
+        extract: { links: true, emails: true, metadata: true, social: true, content: true }
+      }, req.deviceId);
+      profile.discoveryCrawlId = job._id;
+      await profile.save();
+      res.status(201).json({ profile, discoveryCrawl: job });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.get('/profiles/:domain', async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const domain = String(req.params.domain || '').toLowerCase();
+      const profile = await refreshRecommendedPages(req.deviceId, domain)
+        || await MonitoringProfile.findOne({ deviceId: req.deviceId, domain }).lean();
+      if (!profile) return res.status(404).json({ message: 'Monitoring profile not found' });
+      const [events, domainProfile] = await Promise.all([
+        ChangeEvent.find({ deviceId: req.deviceId, domain }).sort({ detectedAt: -1 }).limit(100).lean(),
+        DomainProfile.findOne({ deviceId: req.deviceId, domain }).lean()
+      ]);
+      res.json({ profile, events, domain: domainProfile });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.patch('/profiles/:id', async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const allowed = ['monitoredPages', 'schedule', 'sensitivity', 'enabled'];
+      const patch = Object.fromEntries(Object.entries(req.body || {}).filter(([key]) => allowed.includes(key)));
+      const profile = await MonitoringProfile.findOneAndUpdate(
+        { _id: req.params.id, deviceId: req.deviceId },
+        { $set: patch },
+        { new: true }
+      );
+      if (!profile) return res.status(404).json({ message: 'Monitoring profile not found' });
+      res.json(profile);
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.post('/profiles/:id/accept-recommendations', async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const profile = await acceptRecommendations(req.deviceId, String(req.params.id));
+      if (!profile) return res.status(404).json({ message: 'Monitoring profile not found' });
+      res.json(profile);
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.patch('/events/:id/read', async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const event = await ChangeEvent.findOneAndUpdate(
+        { _id: req.params.id, deviceId: req.deviceId },
+        { $set: { readAt: new Date() } },
+        { new: true }
+      );
+      if (!event) return res.status(404).json({ message: 'Change event not found' });
+      res.json(event);
     } catch (error) {
       next(error);
     }

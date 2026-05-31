@@ -12,6 +12,7 @@ const DOMAIN_CRAWL_CONFIG: Omit<CrawlConfig, 'seedUrl'> = {
   maxDepth: 2,
   concurrency: 5,
   sameDomainOnly: true,
+  respectRobots: false,
   discovery: {
     sitemap: true,
     renderJavaScript: true,
@@ -100,7 +101,14 @@ export function Domains() {
 
     setIsStartingCrawl(true);
     try {
-      const job = await api.createCrawl({ ...DOMAIN_CRAWL_CONFIG, seedUrl });
+      const settings = await api.getSettings().catch(() => null);
+      const config = settings ? {
+        ...DOMAIN_CRAWL_CONFIG,
+        maxPages: settings.crawling.maxPages,
+        maxDepth: settings.crawling.defaultDepth,
+        respectRobots: settings.crawling.respectRobots
+      } : DOMAIN_CRAWL_CONFIG;
+      const job = await api.createCrawl({ ...config, seedUrl });
       showToast({ title: 'Crawl started', description: domain, tone: 'success' });
       navigate(`/crawls/${job._id}`);
     } finally {

@@ -26,6 +26,7 @@ import { createDailyEmailAlert } from '../services/alertService.js';
 import { updateCrawlSummaryForPage, rebuildCrawlSummary } from '../services/crawlSummaryService.js';
 import { invalidateCrawlReads, invalidateDomainReads, invalidateWorkspaceReads } from '../services/cacheInvalidation.js';
 import { publishLiveEvent } from '../services/liveEvents.js';
+import { getWorkspaceSettings } from '../services/workspaceSettingsService.js';
 
 function sevenDaysFromNow() {
   return new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
@@ -77,7 +78,14 @@ export class CrawlManager {
       throw error;
     }
 
-    const config = normalizeCrawlConfig(rawConfig);
+    const settings = await getWorkspaceSettings(deviceId).catch(() => null);
+    const defaults = settings?.crawling as { maxPages?: number; defaultDepth?: number; respectRobots?: boolean } | undefined;
+    const config = normalizeCrawlConfig({
+      maxPages: defaults?.maxPages,
+      maxDepth: defaults?.defaultDepth,
+      respectRobots: defaults?.respectRobots,
+      ...rawConfig
+    });
     const job = await CrawlJob.create({
       deviceId,
       seedUrl: config.seedUrl,
@@ -388,7 +396,7 @@ export class CrawlManager {
   async crawlPage({ deviceId, crawlId, item, config, signal }: CrawlPageInput): Promise<CrawlPageResult | null> {
     try {
       assertPublicHttpUrl(item.url);
-      if (!(await isAllowedByRobots(item.url))) {
+      if (!(await isAllowedByRobots(item.url, config.respectRobots))) {
         const message = 'robots.txt disallows this URL.';
         const page = await Page.findOneAndUpdate(
           { deviceId, crawlId, url: item.url },

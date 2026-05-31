@@ -17,6 +17,7 @@ const DEFAULT_CRAWL_CONFIG: Omit<CrawlConfig, 'seedUrl'> = {
   maxDepth: 3,
   concurrency: 5,
   sameDomainOnly: true,
+  respectRobots: false,
   discovery: {
     sitemap: true,
     renderJavaScript: true,
@@ -44,12 +45,21 @@ export function Overview() {
   const [selectedActivityId, setSelectedActivityId] = useState<string | null>(null);
 
   async function load() {
-    const [crawlJobs, data] = await Promise.all([
+    const [crawlJobs, data, settings] = await Promise.all([
       api.listCrawls(),
-      api.getData({ limit: 25 })
+      api.getData({ limit: 25 }),
+      api.getSettings().catch(() => null)
     ]);
     setJobs(crawlJobs);
     setPages(data.items);
+    if (settings) {
+      setConfig((current) => ({
+        ...current,
+        maxPages: settings.crawling.maxPages,
+        maxDepth: settings.crawling.defaultDepth,
+        respectRobots: settings.crawling.respectRobots
+      }));
+    }
     setIsLoading(false);
   }
 
@@ -187,6 +197,7 @@ export function Overview() {
               <RangeControl label="Concurrency" value={config.concurrency} min={1} max={10} onChange={(value) => setConfig((current) => ({ ...current, concurrency: value }))} />
               <RangeControl label="Render below links" value={config.discovery.renderWhenStaticLinksBelow} min={0} max={100} onChange={(value) => setConfig((current) => ({ ...current, discovery: { ...current.discovery, renderWhenStaticLinksBelow: value } }))} />
               <ToggleControl label="Same domain only" checked={config.sameDomainOnly} onChange={(value) => setConfig((current) => ({ ...current, sameDomainOnly: value }))} />
+              <ToggleControl label="Respect robots.txt" checked={Boolean(config.respectRobots)} onChange={(value) => setConfig((current) => ({ ...current, respectRobots: value }))} />
               <ToggleControl label="Sitemap discovery" checked={config.discovery.sitemap} onChange={(value) => setConfig((current) => ({ ...current, discovery: { ...current.discovery, sitemap: value } }))} />
               <ToggleControl label="Render JavaScript" checked={config.discovery.renderJavaScript} onChange={(value) => setConfig((current) => ({ ...current, discovery: { ...current.discovery, renderJavaScript: value } }))} />
               <ToggleControl label="Page hint links" checked={config.discovery.includeMetaLinks} onChange={(value) => setConfig((current) => ({ ...current, discovery: { ...current.discovery, includeMetaLinks: value } }))} />

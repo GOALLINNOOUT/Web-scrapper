@@ -6,6 +6,7 @@ import { dataRouter } from './routes/dataRoutes.js';
 import { metadataRouter } from './routes/metadataRoutes.js';
 import { domainRouter } from './routes/domainRoutes.js';
 import { alertsRouter, monitoringRouter } from './routes/monitoringRoutes.js';
+import { settingsRouter } from './routes/settingsRoutes.js';
 import { liveRouter } from './routes/liveRoutes.js';
 import { deviceScope } from './middleware/deviceScope.js';
 import type { CrawlManager } from './crawler/CrawlManager.js';
@@ -69,8 +70,9 @@ export function createApp({ crawlManager }: CreateAppOptions) {
   app.use('/results', dataRouter());
   app.use('/search', dataRouter());
   app.use('/domain', domainRouter());
-  app.use('/monitoring', monitoringRouter());
+  app.use('/monitoring', monitoringRouter({ crawlManager }));
   app.use('/alerts', alertsRouter());
+  app.use('/settings', settingsRouter());
   app.use('/metadata', metadataRouter());
   app.use('/events', liveRouter());
 

@@ -10,7 +10,9 @@ import { extractSocialLinks } from '../src/extractors/social.js';
 import { detectTechStack } from '../src/extractors/techStack.js';
 import { isPrivateHost, isPrivateUrl } from '../src/middleware/ssrfProtection.js';
 import { sanitizeDeep } from '../src/middleware/inputSanitizer.js';
+import { scoreMonitoringCandidate } from '../src/services/monitoringProfileService.js';
 import { shouldRenderFallback } from '../src/services/crawlPageProcessor.js';
+import { defaultWorkspaceSettings, mergeSettings } from '../src/services/workspaceSettingsService.js';
 import type { CrawlConfig } from '../src/types.js';
 import { isSameDomain, normalizeUrl } from '../src/utils/url.js';
 
@@ -239,6 +241,25 @@ test('uses Playwright fallback only when static discovery is weak', () => {
   assert.equal(shouldRenderFallback(config, 20), false);
   assert.equal(shouldRenderFallback({ ...config, discovery: { ...config.discovery, renderJavaScript: false } }, 2), false);
   assert.equal(shouldRenderFallback({ ...config, extract: { ...config.extract, links: false } }, 2), false);
+});
+
+test('scores monitoring candidates for important pages', () => {
+  assert.equal(scoreMonitoringCandidate('https://example.com/pricing').label, 'Pricing');
+  assert.equal(scoreMonitoringCandidate('https://example.com/careers').score, 92);
+  assert.equal(scoreMonitoringCandidate('https://example.com/privacy', 15).score, 15);
+});
+
+test('merges workspace settings without losing defaults', () => {
+  const merged = mergeSettings(defaultWorkspaceSettings, {
+    crawling: { maxPages: 1000, respectRobots: true },
+    monitoring: { sensitivity: 'high' }
+  });
+
+  assert.equal(merged.crawling.maxPages, 1000);
+  assert.equal(merged.crawling.respectRobots, true);
+  assert.equal(merged.crawling.defaultDepth, 2);
+  assert.equal(merged.monitoring.sensitivity, 'high');
+  assert.equal(merged.notifications.events.newPages, true);
 });
 
 test('blocks private SSRF host targets', () => {

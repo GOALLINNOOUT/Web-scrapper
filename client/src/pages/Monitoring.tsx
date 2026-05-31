@@ -1,283 +1,245 @@
-import { AlertTriangle, Bell, CheckCircle2, Clock3, ExternalLink, Globe2, Mail, Radio } from 'lucide-react';
+import { Activity, Bell, BriefcaseBusiness, CheckCircle2, ChevronRight, Eye, Globe2, Mail, Plus, Radar, Search, Sparkles } from 'lucide-react';
+import type { FormEvent } from 'react';
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../api.js';
-import { CopyButton } from '../components/CopyButton.jsx';
-import { CrawlStatusBadge } from '../components/CrawlStatusBadge.jsx';
 import { LoadingState } from '../components/LoadingState.jsx';
-import type { AlertEvent, MonitoringSummary } from '../types.js';
+import { showToast } from '../toast.js';
+import type { ChangeEvent, MonitoringProfile, MonitoringSummary } from '../types.js';
+
+const monitorTypes = [
+  { value: 'competitive_intelligence', label: 'Competitive Intelligence' },
+  { value: 'lead_discovery', label: 'Lead Discovery' },
+  { value: 'seo_monitoring', label: 'SEO Monitoring' },
+  { value: 'infrastructure_monitoring', label: 'Infrastructure Monitoring' },
+  { value: 'custom', label: 'Custom' }
+] as const;
 
 export function Monitoring() {
   const [summary, setSummary] = useState<MonitoringSummary | null>(null);
+  const [activeDomain, setActiveDomain] = useState<string>('');
+  const [domainDetail, setDomainDetail] = useState<{ profile: MonitoringProfile; events: ChangeEvent[] } | null>(null);
+  const [domain, setDomain] = useState('');
+  const [monitoringType, setMonitoringType] = useState<MonitoringProfile['monitoringType']>('competitive_intelligence');
   const [isLoading, setIsLoading] = useState(true);
+  const [isAdding, setIsAdding] = useState(false);
+
+  async function load() {
+    const data = await api.getMonitoring();
+    setSummary(data);
+    if (!activeDomain && data.profiles[0]) setActiveDomain(data.profiles[0].domain);
+  }
 
   useEffect(() => {
     let cancelled = false;
-    function load() {
-      api.getMonitoring()
-        .then((data) => {
-          if (!cancelled) setSummary(data);
-        })
-        .catch(console.error)
-        .finally(() => {
-          if (!cancelled) setIsLoading(false);
-        });
-    }
-    load();
+    setIsLoading(true);
+    load().catch(console.error).finally(() => {
+      if (!cancelled) setIsLoading(false);
+    });
     return () => {
       cancelled = true;
     };
   }, []);
 
-  const groupedAlerts = useMemo(() => {
-    const groups = new Map<string, NonNullable<MonitoringSummary['recentAlerts']>>();
-    for (const alert of dedupeAlerts(summary?.recentAlerts || [])) {
-      const key = alert.domain || alert.type;
-      groups.set(key, [...(groups.get(key) || []), alert]);
+  useEffect(() => {
+    if (!activeDomain) return;
+    api.getMonitoringProfile(activeDomain)
+      .then((data) => setDomainDetail({ profile: data.profile, events: data.events }))
+      .catch(() => setDomainDetail(null));
+  }, [activeDomain]);
+
+  async function addDomain(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!domain.trim()) return;
+    setIsAdding(true);
+    try {
+      const result = await api.createMonitoringProfile({ domain, monitoringType });
+      showToast({ title: 'Monitoring started', description: result.profile.domain, tone: 'success' });
+      setDomain('');
+      setActiveDomain(result.profile.domain);
+      await load();
+    } finally {
+      setIsAdding(false);
     }
-    return [...groups.entries()];
-  }, [summary]);
+  }
+
+  async function acceptRecommendations(profile: MonitoringProfile) {
+    const updated = await api.acceptMonitoringRecommendations(profile._id);
+    setDomainDetail((current) => current ? { ...current, profile: updated } : current);
+    await load();
+    showToast({ title: 'Recommendations accepted', description: `${updated.monitoredPages.length} pages are now monitored.`, tone: 'success' });
+  }
+
+  const groupedEvents = useMemo(() => groupEvents(summary?.changeFeed || []), [summary]);
+
+  if (isLoading || !summary) return <LoadingState title="Loading intelligence feed" rows={7} />;
 
   return (
     <div className="grid gap-6">
-      <header>
-        <span className="text-xs font-extrabold uppercase tracking-[0.14em] text-brand-600">Monitoring</span>
-        <h1 className="command-heading mt-2 text-[40px] font-extrabold leading-tight max-[900px]:text-3xl">Intelligence monitoring</h1>
-        <p className="mt-2 text-[16px] text-[#636360]">Important changes, unusual behavior, and active crawl telemetry in one quiet feed.</p>
+      <header className="flex items-end justify-between gap-4 max-[900px]:grid">
+        <div>
+          <span className="text-xs font-extrabold uppercase tracking-[0.14em] text-brand-600">Monitoring</span>
+          <h1 className="command-heading mt-2 text-[40px] font-extrabold leading-tight max-[900px]:text-3xl">What changed since you last looked</h1>
+          <p className="mt-2 max-w-3xl text-[16px] text-[#636360]">An intelligence feed for important pages, contacts, technology, DNS, WHOIS, and content shifts.</p>
+        </div>
       </header>
 
-      {isLoading || !summary ? <LoadingState title="Loading monitoring feed" rows={6} /> : (
-        <>
-          <div className="grid grid-cols-3 gap-4 max-[900px]:grid-cols-1">
-            <HealthCard icon={Radio} label="Active crawls" value={summary.health.activeCrawls} tone="green" />
-            <HealthCard icon={Globe2} label="Indexed domains" value={summary.health.monitoredDomains} tone="neutral" />
-            <HealthCard icon={AlertTriangle} label="Failed crawls 24h" value={summary.health.failedCrawls24h} tone={summary.health.failedCrawls24h ? 'amber' : 'neutral'} />
+      <form className="grid grid-cols-[minmax(220px,1fr)_240px_150px] gap-3 rounded-lg border border-[#eaeae6] bg-white p-4 shadow-panel max-[860px]:grid-cols-1" onSubmit={addDomain}>
+        <label className="relative">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-[#636360]" size={16} />
+          <input className="h-12 w-full rounded-lg border border-[#eaeae6] bg-[#f5f5f2] pl-10 pr-3 text-sm font-semibold outline-none focus:border-brand-500 focus:bg-white" value={domain} onChange={(event) => setDomain(event.target.value)} placeholder="Add domain to monitor, e.g. example.com" />
+        </label>
+        <select className="h-12 rounded-lg border border-[#eaeae6] bg-[#f5f5f2] px-3 text-sm font-bold outline-none focus:border-brand-500 focus:bg-white" value={monitoringType} onChange={(event) => setMonitoringType(event.target.value as MonitoringProfile['monitoringType'])}>
+          {monitorTypes.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
+        </select>
+        <button className="inline-flex h-12 items-center justify-center gap-2 rounded-lg bg-brand-600 px-4 text-sm font-extrabold text-white hover:bg-brand-700 disabled:opacity-60" disabled={isAdding} type="submit"><Plus size={16} /> Add</button>
+      </form>
+
+      <div className="grid grid-cols-4 gap-4 max-[1100px]:grid-cols-2 max-[640px]:grid-cols-1">
+        <MetricCard icon={Sparkles} label="Changes today" value={summary.counts.changesToday} />
+        <MetricCard icon={Globe2} label="New pages" value={summary.counts.newPages} />
+        <MetricCard icon={Mail} label="New emails" value={summary.counts.newEmails} />
+        <MetricCard icon={Radar} label="Monitored domains" value={summary.health.monitoredDomains} />
+      </div>
+
+      <div className="grid grid-cols-[minmax(0,1.15fr)_minmax(360px,0.85fr)] gap-5 max-[1180px]:grid-cols-1">
+        <section className="rounded-lg border border-[#eaeae6] bg-white p-5 shadow-panel">
+          <div className="mb-4 flex items-center justify-between gap-3">
+            <h2 className="text-2xl font-extrabold">Change feed</h2>
+            <Bell className="text-brand-600" size={20} />
           </div>
-
-          <div className="grid grid-cols-[minmax(0,0.95fr)_minmax(0,1.05fr)] gap-5 max-[1100px]:grid-cols-1">
-            <section className="rounded-lg border border-[#eaeae6] bg-white p-6 shadow-panel">
-              <div className="mb-5 flex items-center justify-between gap-4">
-                <div>
-                  <h2 className="text-2xl font-extrabold">Active crawls</h2>
-                  <p className="mt-1 text-sm font-semibold text-[#636360]">Rows update automatically.</p>
+          <div className="grid max-h-[720px] gap-5 overflow-y-auto pr-1">
+            {groupedEvents.length === 0 ? <EmptyState title="No changes detected" body="Add a domain or wait for the next monitoring check to populate this intelligence feed." /> : null}
+            {groupedEvents.map(([group, events]) => (
+              <div key={group}>
+                <h3 className="mb-2 text-xs font-extrabold uppercase tracking-[0.14em] text-[#636360]">{group}</h3>
+                <div className="grid gap-2">
+                  {events.map((event) => <ChangeRow event={event} key={event._id} onDomain={setActiveDomain} />)}
                 </div>
-                <Clock3 className="text-brand-600" size={22} />
               </div>
-              <div className="grid gap-3">
-                {summary.activeCrawls.length === 0 ? (
-                  <p className="rounded-lg bg-[#f5f5f2] p-4 text-sm font-semibold text-[#636360]">No active crawls right now. Start a crawl when you want this feed to become live telemetry.</p>
-                ) : null}
-                {summary.activeCrawls.map((job) => (
-                  <Link className="grid gap-2 rounded-lg bg-[#f5f5f2] p-4 transition hover:bg-[#efefeb]" key={job._id} to={`/crawls/${job._id}`}>
-                    <div className="flex min-w-0 items-center justify-between gap-3">
-                      <strong className="truncate text-lg">{job.seedUrl}</strong>
-                      <CrawlStatusBadge status={job.status} />
-                    </div>
-                    <span className="text-sm font-semibold text-[#636360]">{job.pagesCrawled} pages / {job.emailsFound} emails / {job.socialLinksFound} socials</span>
-                  </Link>
-                ))}
-              </div>
-            </section>
-
-            <section className="rounded-lg border border-[#eaeae6] bg-white p-6 shadow-panel">
-              <div className="mb-5 flex items-center justify-between gap-4">
-                <div>
-                  <h2 className="text-2xl font-extrabold">Grouped alerts</h2>
-                  <p className="mt-1 text-sm font-semibold text-[#636360]">Recent events without noisy repetition.</p>
-                </div>
-                <Bell className="text-brand-600" size={22} />
-              </div>
-              <div className="grid max-h-[62vh] gap-3 overflow-y-auto pr-1">
-                {groupedAlerts.length === 0 ? (
-                  <p className="rounded-lg bg-[#f5f5f2] p-4 text-sm font-semibold text-[#636360]">No important alerts yet. Change, contact, and crawl failure events will group here automatically.</p>
-                ) : null}
-                {groupedAlerts.map(([group, alerts]) => (
-                  <details className="rounded-lg bg-[#f5f5f2] p-4" key={group} open>
-                    <summary className="cursor-pointer list-none text-base font-extrabold">{group} <span className="text-sm text-[#636360]">({alerts.length})</span></summary>
-                    <div className="mt-3 grid gap-2">
-                      {alerts.map((alert) => (
-                        <div className="rounded-lg bg-white p-3 text-sm" key={alert._id}>
-                          <div className="flex items-center gap-2 font-bold"><CheckCircle2 className={alert.severity === 'high' ? 'text-red-600' : alert.severity === 'medium' ? 'text-amber-600' : 'text-brand-600'} size={15} /> {alert.message}</div>
-                          <span className="mt-1 block text-xs font-semibold text-[#636360]">{new Date(alert.createdAt).toLocaleString()}</span>
-                          <AlertDetails alert={alert} />
-                        </div>
-                      ))}
-                    </div>
-                  </details>
-                ))}
-              </div>
-            </section>
-          </div>
-        </>
-      )}
-    </div>
-  );
-}
-
-function AlertDetails({ alert }: { alert: AlertEvent }) {
-  const emails = extractEmails(alert.metadata);
-  const changes = extractChanges(alert.metadata);
-  const hasDetails = emails.length > 0 || changes.length > 0 || alert.pageUrl || alert.crawlId;
-  if (!hasDetails) return null;
-
-  return (
-    <div className="mt-3 grid gap-3 rounded-md border border-[#eaeae6] bg-[#fbfbf8] p-3">
-      {emails.length > 0 ? (
-        <div className="grid gap-2">
-          <span className="inline-flex items-center gap-2 text-xs font-extrabold uppercase tracking-[0.12em] text-red-700"><Mail size={13} /> Emails</span>
-          <div className="flex flex-wrap gap-2">
-            {emails.map((email) => (
-              <span className="inline-flex max-w-full items-center gap-2 rounded-md bg-white py-1.5 pl-3 pr-1.5 font-semibold text-[#111110]" key={email}>
-                <span className="min-w-0 break-words">{email}</span>
-                <CopyButton value={email} label="Copy email" />
-              </span>
             ))}
           </div>
-        </div>
-      ) : null}
+        </section>
 
-      {changes.length > 0 ? (
-        <div className="grid gap-2">
-          <span className="text-xs font-extrabold uppercase tracking-[0.12em] text-amber-700">Changes</span>
-          {changes.map((change, index) => (
-            <div className="rounded-md bg-white p-3" key={`${change.type}-${index}`}>
-              <div className="flex flex-wrap items-center gap-2">
-                <strong className="text-sm">{formatChangeType(change.type)}</strong>
-                <span className="rounded-full bg-[#efefeb] px-2 py-0.5 text-xs font-extrabold text-[#636360]">{change.severity || 'low'}</span>
-              </div>
-              <ChangeData data={change.data} />
+        <aside className="grid h-fit gap-5">
+          <section className="rounded-lg border border-[#eaeae6] bg-white p-5 shadow-panel">
+            <h2 className="text-xl font-extrabold">Monitored domains</h2>
+            <div className="mt-4 grid gap-2">
+              {summary.profiles.length === 0 ? <EmptyState title="No domains yet" body="Start by adding a competitor, lead, or site you want to watch." /> : null}
+              {summary.profiles.map((profile) => (
+                <button className={`grid gap-1 rounded-lg p-3 text-left transition ${activeDomain === profile.domain ? 'bg-brand-600 text-white' : 'bg-[#f5f5f2] hover:bg-[#efefeb]'}`} key={profile._id} onClick={() => setActiveDomain(profile.domain)} type="button">
+                  <span className="flex items-center justify-between gap-2 font-extrabold">{profile.domain}<ChevronRight size={16} /></span>
+                  <span className={activeDomain === profile.domain ? 'text-sm font-semibold text-white/75' : 'text-sm font-semibold text-[#636360]'}>{profile.enabled ? 'Active' : 'Paused'} / {formatPreset(profile.monitoringType)} / {profile.schedule}</span>
+                </button>
+              ))}
             </div>
-          ))}
-        </div>
-      ) : null}
+          </section>
 
-      <div className="flex flex-wrap gap-2">
-        {alert.pageUrl ? (
-          <a className="inline-flex min-h-9 max-w-full items-center gap-2 rounded-md border border-[#c8c8c2] bg-white px-3 text-xs font-extrabold text-[#636360] transition hover:border-brand-300 hover:text-brand-800" href={alert.pageUrl} target="_blank" rel="noreferrer">
-            <ExternalLink size={14} /> <span className="truncate">Open source page</span>
-          </a>
-        ) : null}
-        {alert.crawlId ? (
-          <Link className="inline-flex min-h-9 items-center gap-2 rounded-md bg-brand-600 px-3 text-xs font-extrabold text-white transition hover:bg-brand-700" to={`/crawls/${alert.crawlId}`}>
-            Open crawl
-          </Link>
-        ) : null}
+          {domainDetail ? (
+            <section className="rounded-lg border border-[#eaeae6] bg-white p-5 shadow-panel">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <h2 className="text-xl font-extrabold">{domainDetail.profile.domain}</h2>
+                  <p className="mt-1 text-sm font-semibold text-[#636360]">{domainDetail.profile.monitoredPages.length} monitored pages</p>
+                </div>
+                <button className="inline-flex min-h-10 items-center gap-2 rounded-lg bg-[#f5f5f2] px-3 text-sm font-extrabold hover:bg-[#efefeb]" onClick={() => acceptRecommendations(domainDetail.profile)} type="button"><CheckCircle2 size={15} /> Accept</button>
+              </div>
+              <div className="mt-4 grid gap-3">
+                <PageList title="Recommended" pages={domainDetail.profile.recommendedPages} />
+                <PageList title="Monitoring" pages={domainDetail.profile.monitoredPages} />
+              </div>
+            </section>
+          ) : null}
+        </aside>
       </div>
     </div>
   );
 }
 
-function ChangeData({ data }: { data?: Record<string, unknown> }) {
-  if (!data || Object.keys(data).length === 0) return null;
-
-  const emails = Array.isArray(data.emails) ? data.emails.map(String) : [];
-  if (emails.length > 0) {
-    return (
-      <div className="mt-2 flex flex-wrap gap-2">
-        {emails.map((email) => (
-          <span className="inline-flex max-w-full items-center gap-2 rounded-md bg-[#f5f5f2] py-1.5 pl-3 pr-1.5 text-xs font-semibold text-[#111110]" key={email}>
-            <span className="min-w-0 break-words">{email}</span>
-            <CopyButton value={email} label="Copy email" />
-          </span>
-        ))}
-      </div>
-    );
-  }
-
-  const rows = Object.entries(data).filter(([, value]) => value !== undefined && value !== null && value !== '');
-  if (rows.length === 0) return null;
-
+function ChangeRow({ event, onDomain }: { event: ChangeEvent; onDomain: (domain: string) => void }) {
   return (
-    <dl className="mt-2 grid gap-1 text-xs">
-      {rows.map(([key, value]) => (
-        <div className="grid gap-1 rounded bg-[#f5f5f2] p-2" key={key}>
-          <dt className="font-extrabold uppercase tracking-[0.08em] text-[#636360]">{key}</dt>
-          <dd className="break-words font-semibold text-[#111110]">{String(value)}</dd>
-        </div>
-      ))}
-    </dl>
+    <article className="rounded-lg border border-[#eaeae6] bg-[#fbfbf8] p-4">
+      <div className="flex items-start justify-between gap-3">
+        <button className="min-w-0 text-left" onClick={() => onDomain(event.domain)} type="button">
+          <strong className="block truncate text-base">{formatEvent(event.eventType)}</strong>
+          <span className="mt-1 block text-sm font-semibold text-[#636360]">{event.reason || 'Change detected'} / {event.domain}</span>
+        </button>
+        <span className={`rounded-md px-2 py-1 text-xs font-extrabold ${event.severity === 'high' ? 'bg-red-50 text-red-700' : event.severity === 'medium' ? 'bg-amber-50 text-amber-700' : 'bg-[#efefeb] text-[#636360]'}`}>{event.severity}</span>
+      </div>
+      <DiffPreview event={event} />
+      {event.url ? <a className="mt-3 inline-flex max-w-full items-center gap-2 text-xs font-extrabold text-brand-700" href={event.url} target="_blank" rel="noreferrer"><Eye size={14} /> <span className="truncate">{event.url}</span></a> : null}
+    </article>
   );
 }
 
-function extractEmails(metadata?: Record<string, unknown>) {
-  const emails = metadata?.emails;
-  return Array.isArray(emails) ? [...new Set(emails.map(String).filter(Boolean))] : [];
+function DiffPreview({ event }: { event: ChangeEvent }) {
+  const rows = Object.entries(event.diff || {}).filter(([, value]) => value !== undefined && value !== null && String(value) !== '');
+  if (rows.length === 0 && !event.oldValue && !event.newValue) return null;
+  return (
+    <div className="mt-3 grid grid-cols-2 gap-2 text-xs max-[640px]:grid-cols-1">
+      <div className="rounded-md bg-white p-3"><span className="font-extrabold text-[#636360]">Before</span><pre className="mt-1 whitespace-pre-wrap break-words font-sans font-semibold">{formatValue(event.oldValue)}</pre></div>
+      <div className="rounded-md bg-white p-3"><span className="font-extrabold text-[#636360]">After</span><pre className="mt-1 whitespace-pre-wrap break-words font-sans font-semibold">{formatValue(event.newValue || Object.fromEntries(rows))}</pre></div>
+    </div>
+  );
 }
 
-function extractChanges(metadata?: Record<string, unknown>) {
-  const changes = metadata?.changes;
-  if (!Array.isArray(changes)) return [];
-  return changes
-    .filter((change): change is ChangeAlertItem => Boolean(change) && typeof change === 'object')
-    .map((change) => ({
-      type: String(change.type || 'change'),
-      severity: typeof change.severity === 'string' ? change.severity : undefined,
-      data: change.data && typeof change.data === 'object' ? change.data as Record<string, unknown> : undefined
-    }));
+function PageList({ title, pages }: { title: string; pages: MonitoringProfile['recommendedPages'] }) {
+  return (
+    <div>
+      <h3 className="mb-2 text-xs font-extrabold uppercase tracking-[0.14em] text-[#636360]">{title}</h3>
+      <div className="grid gap-2">
+        {pages.length === 0 ? <p className="rounded-lg bg-[#f5f5f2] p-3 text-sm font-semibold text-[#636360]">No pages yet.</p> : null}
+        {pages.slice(0, 6).map((page) => (
+          <div className="rounded-lg bg-[#f5f5f2] p-3" key={page.url}>
+            <div className="flex items-center justify-between gap-2"><strong className="truncate">{page.label}</strong><span className="text-xs font-extrabold text-brand-700">{page.score}</span></div>
+            <p className="mt-1 line-clamp-2 text-xs font-semibold text-[#636360]">{page.reason}</p>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
 }
 
-function formatChangeType(type: string) {
-  return type.replace(/_/g, ' ').replace(/\b\w/g, (letter) => letter.toUpperCase());
-}
-
-interface ChangeAlertItem {
-  type?: unknown;
-  severity?: unknown;
-  data?: unknown;
-}
-
-function dedupeAlerts(alerts: MonitoringSummary['recentAlerts']) {
-  const seen = new Set<string>();
-  const output: MonitoringSummary['recentAlerts'] = [];
-
-  for (const alert of alerts) {
-    const keys = alertDedupeKeys(alert);
-    if (keys.some((key) => seen.has(key))) continue;
-    keys.forEach((key) => seen.add(key));
-    output.push(alert);
-  }
-
-  return output;
-}
-
-function alertDedupeKeys(alert: MonitoringSummary['recentAlerts'][number]) {
-  const day = new Date(alert.createdAt).toLocaleDateString();
-  const metadata = alert.metadata || {};
-  const emails = Array.isArray(metadata.emails) ? metadata.emails.map(String) : [];
-  if (alert.type === 'new_email' && emails.length > 0) {
-    return emails.map((email) => `email:${day}:${email.toLowerCase()}`);
-  }
-
-  const socials = extractSocialValues(metadata);
-  if (socials.length > 0) {
-    return socials.map((social) => `social:${day}:${social.toLowerCase()}`);
-  }
-
-  return [`alert:${alert.type}:${day}:${alert.domain || ''}:${alert.message}`];
-}
-
-function extractSocialValues(metadata: Record<string, unknown>) {
-  const candidates = [metadata.social, metadata.socials, metadata.profiles];
-  return candidates.flatMap((candidate) => {
-    if (!candidate || typeof candidate !== 'object') return [];
-    if (Array.isArray(candidate)) return candidate.map(String);
-    return Object.values(candidate as Record<string, unknown>).flatMap((value) => {
-      if (Array.isArray(value)) return value.map(String);
-      if (typeof value === 'string') return [value];
-      return [];
-    });
-  });
-}
-
-function HealthCard({ icon: Icon, label, value, tone }: { icon: typeof Radio; label: string; value: number; tone: 'green' | 'amber' | 'neutral' }) {
-  const toneClass = tone === 'green' ? 'bg-[#ebf2ff] text-brand-700' : tone === 'amber' ? 'bg-amber-50 text-amber-700' : 'bg-[#efefeb] text-[#636360]';
+function MetricCard({ icon: Icon, label, value }: { icon: typeof Activity; label: string; value: number }) {
   return (
     <section className="rounded-lg border border-[#eaeae6] bg-white p-5 shadow-panel">
-      <div className="mb-5 flex items-center justify-between gap-3">
-        <span className="text-sm font-bold text-[#636360]">{label}</span>
-        <span className={`grid h-10 w-10 place-items-center rounded-full ${toneClass}`}><Icon size={18} /></span>
-      </div>
+      <div className="mb-5 flex items-center justify-between gap-3"><span className="text-sm font-bold text-[#636360]">{label}</span><span className="grid h-10 w-10 place-items-center rounded-full bg-[#ebf2ff] text-brand-700"><Icon size={18} /></span></div>
       <strong className="text-4xl font-extrabold">{value}</strong>
     </section>
   );
+}
+
+function EmptyState({ title, body }: { title: string; body: string }) {
+  return <div className="rounded-lg bg-[#f5f5f2] p-4"><strong>{title}</strong><p className="mt-1 text-sm font-semibold text-[#636360]">{body}</p></div>;
+}
+
+function groupEvents(events: ChangeEvent[]) {
+  const groups = new Map<string, ChangeEvent[]>();
+  for (const event of events) {
+    const key = relativeDay(new Date(event.detectedAt));
+    groups.set(key, [...(groups.get(key) || []), event]);
+  }
+  return [...groups.entries()];
+}
+
+function relativeDay(date: Date) {
+  const today = new Date().toDateString();
+  const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000).toDateString();
+  if (date.toDateString() === today) return 'Today';
+  if (date.toDateString() === yesterday) return 'Yesterday';
+  return date.toLocaleDateString();
+}
+
+function formatEvent(value: string) {
+  return value.replace(/_/g, ' ').replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
+
+function formatPreset(value: string) {
+  return value.replace(/_/g, ' ').replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
+
+function formatValue(value: unknown) {
+  if (!value) return 'No previous value';
+  if (typeof value === 'string') return value;
+  return JSON.stringify(value, null, 2);
 }

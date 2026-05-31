@@ -70,7 +70,7 @@ export async function processCrawlPage(data: CrawlPageJobData, queues?: QueueBun
   const domain = domainFromUrl(data.url);
   const breaker = getCircuitBreaker(domain);
   if (breaker.isOpen()) return { skipped: true, reason: 'circuit_open' };
-  if (!(await isAllowedByRobots(data.url))) {
+  if (!(await isAllowedByRobots(data.url, config.respectRobots))) {
     await maybeCompleteCrawl(data.deviceId, data.crawlId, queues, queueJobId);
     return { skipped: true, reason: 'robots_disallowed' };
   }

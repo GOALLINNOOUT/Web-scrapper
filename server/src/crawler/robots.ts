@@ -5,8 +5,8 @@ import { config } from '../config/index.js';
 const memoryCache = new Map<string, { value: string; expiresAt: number }>();
 const TTL_SECONDS = 24 * 60 * 60;
 
-export async function isAllowedByRobots(url: string) {
-  if (!config.crawlerRespectRobots) return true;
+export async function isAllowedByRobots(url: string, respectRobots = config.crawlerRespectRobots) {
+  if (!respectRobots) return true;
 
   try {
     const parsed = new URL(url);

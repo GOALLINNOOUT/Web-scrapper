@@ -12,9 +12,12 @@ import { Settings } from './pages/Settings.jsx';
 import { ToastProvider } from './components/ToastProvider.jsx';
 import { RouteSeo } from './components/RouteSeo.jsx';
 import { useLiveEvents } from './hooks/useLiveEvents.js';
+import { applyTheme, getStoredTheme } from './theme.js';
 import './styles.css';
 
 const root = document.getElementById('root') as RootElement | null;
+
+applyTheme(getStoredTheme());
 
 if (!root) {
   throw new Error('Root element not found');

@@ -1,6 +1,6 @@
 import { getDeviceId } from './device.js';
 import { showToast } from './toast.js';
-import type { AlertEvent, CrawlConfig, CrawlJob, CrawlPage, CrawlSummary, CursorPage, DataFilters, DomainProfile, MetadataPreview, MonitoringSummary } from './types.js';
+import type { AlertEvent, ChangeEvent, CrawlConfig, CrawlJob, CrawlPage, CrawlSummary, CursorPage, DataFilters, DomainProfile, MetadataPreview, MonitoringProfile, MonitoringSummary, WorkspaceSettings } from './types.js';
 
 export const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:4000';
 const DEFAULT_GET_CACHE_MS = 2500;
@@ -79,6 +79,7 @@ function getReadCacheTtl(path: string) {
   if (path.startsWith('/crawl/') && path.includes('/summary')) return 7500;
   if (path.startsWith('/crawl/')) return 5000;
   if (path.startsWith('/monitoring')) return 10_000;
+  if (path.startsWith('/settings')) return 10_000;
   if (path.startsWith('/data?')) return 7500;
   if (path.startsWith('/domain')) return 30_000;
   return DEFAULT_GET_CACHE_MS;
@@ -119,7 +120,23 @@ export const api = {
   }),
   enrichDomain: (domain: string) => request<DomainProfile>(`/domain/${encodeURIComponent(domain)}/enrich`, { method: 'POST' }),
   getMonitoring: () => request<MonitoringSummary>('/monitoring'),
+  createMonitoringProfile: (payload: { domain: string; monitoringType: MonitoringProfile['monitoringType']; schedule?: MonitoringProfile['schedule']; sensitivity?: MonitoringProfile['sensitivity'] }) => request<{ profile: MonitoringProfile; discoveryCrawl: CrawlJob }>('/monitoring/profiles', {
+    method: 'POST',
+    body: JSON.stringify(payload)
+  }),
+  getMonitoringProfile: (domain: string) => request<{ profile: MonitoringProfile; events: ChangeEvent[]; domain?: DomainProfile }>(`/monitoring/profiles/${encodeURIComponent(domain)}`),
+  updateMonitoringProfile: (id: string, payload: Partial<Pick<MonitoringProfile, 'monitoredPages' | 'schedule' | 'sensitivity' | 'enabled'>>) => request<MonitoringProfile>(`/monitoring/profiles/${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify(payload)
+  }),
+  acceptMonitoringRecommendations: (id: string) => request<MonitoringProfile>(`/monitoring/profiles/${id}/accept-recommendations`, { method: 'POST' }),
+  markChangeRead: (id: string) => request<ChangeEvent>(`/monitoring/events/${id}/read`, { method: 'PATCH' }),
   getAlerts: (limit = 25) => request<{ items: AlertEvent[] }>(`/alerts?limit=${limit}`),
+  getSettings: () => request<WorkspaceSettings>('/settings'),
+  updateSettings: (payload: Partial<WorkspaceSettings>) => request<WorkspaceSettings>('/settings', {
+    method: 'PATCH',
+    body: JSON.stringify(payload)
+  }),
   previewMetadata: (url: string) => request<MetadataPreview>('/metadata/preview', {
     method: 'POST',
     body: JSON.stringify({ url })

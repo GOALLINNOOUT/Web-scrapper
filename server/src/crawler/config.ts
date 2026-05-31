@@ -39,6 +39,7 @@ export function normalizeCrawlConfig(input: RawCrawlConfig = {}): CrawlConfig {
     maxPages: clampNumber(input.maxPages, 1, appConfig.maxPagesPerJob, 100),
     maxDepth: clampNumber(input.maxDepth, 0, appConfig.maxCrawlDepth, 2),
     sameDomainOnly: input.sameDomainOnly !== false,
+    respectRobots: input.respectRobots ?? appConfig.crawlerRespectRobots,
     concurrency: clampNumber(input.concurrency, 1, 10, 5),
     schedule: input.schedule || 'none',
     discovery: {
@@ -56,6 +57,7 @@ export function normalizeCrawlConfig(input: RawCrawlConfig = {}): CrawlConfig {
 export function withCrawlConfigDefaults(input: CrawlConfig): CrawlConfig {
   return {
     ...input,
+    respectRobots: input.respectRobots ?? appConfig.crawlerRespectRobots,
     discovery: {
       ...DEFAULT_DISCOVERY,
       ...(input.discovery || {}),

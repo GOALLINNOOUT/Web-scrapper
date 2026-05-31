@@ -11,6 +11,7 @@ export interface CrawlConfig {
   maxPages: number;
   maxDepth: number;
   sameDomainOnly: boolean;
+  respectRobots?: boolean;
   concurrency: number;
   discovery: DiscoveryConfig;
   extract: ExtractConfig;

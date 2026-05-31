@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Link, Outlet, useNavigate } from 'react-router-dom';
 import { api } from '../api.js';
 import { useDebouncedValue } from '../hooks/useDebouncedValue.js';
+import { watchSystemTheme } from '../theme.js';
 import type { CrawlPage } from '../types.js';
 import { FloatingCrawlMonitor } from './FloatingCrawlMonitor.jsx';
 import { Sidebar } from './Sidebar.jsx';
@@ -30,6 +31,8 @@ export function AppShell() {
     window.addEventListener('keydown', handleShortcut);
     return () => window.removeEventListener('keydown', handleShortcut);
   }, []);
+
+  useEffect(() => watchSystemTheme(), []);
 
   useEffect(() => {
     if (!debouncedQuery.trim()) {

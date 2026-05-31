@@ -13,6 +13,7 @@ export interface CrawlConfig {
   maxPages: number;
   maxDepth: number;
   sameDomainOnly: boolean;
+  respectRobots?: boolean;
   concurrency: number;
   discovery: DiscoveryConfig;
   extract: ExtractConfig;
@@ -227,13 +228,110 @@ export interface AlertEvent {
   createdAt: string;
 }
 
+export interface MonitoringPageConfig {
+  url: string;
+  label: string;
+  reason: string;
+  score: number;
+  enabled: boolean;
+  signals: string[];
+  lastCheckedAt?: string | null;
+}
+
+export interface MonitoringProfile {
+  _id: string;
+  deviceId: string;
+  domain: string;
+  seedUrl: string;
+  monitoringType: 'competitive_intelligence' | 'lead_discovery' | 'seo_monitoring' | 'infrastructure_monitoring' | 'custom';
+  monitoredPages: MonitoringPageConfig[];
+  recommendedPages: MonitoringPageConfig[];
+  schedule: '12h' | 'daily' | 'weekly' | 'monthly';
+  sensitivity: 'low' | 'medium' | 'high';
+  enabled: boolean;
+  lastCheckedAt?: string | null;
+  lastChangeAt?: string | null;
+  discoveryCrawlId?: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ChangeEvent {
+  _id: string;
+  domain: string;
+  url?: string;
+  eventType: 'content_changed' | 'heading_changed' | 'metadata_changed' | 'new_page' | 'removed_page' | 'new_email' | 'removed_email' | 'social_changed' | 'tech_stack_changed' | 'whois_changed' | 'dns_changed' | 'price_changed' | 'score_changed';
+  oldValue?: Record<string, unknown> | null;
+  newValue?: Record<string, unknown> | null;
+  diff?: Record<string, unknown>;
+  severity: 'low' | 'medium' | 'high';
+  reason?: string;
+  crawlId?: string | null;
+  readAt?: string | null;
+  detectedAt: string;
+}
+
 export interface MonitoringSummary {
   activeCrawls: CrawlJob[];
   recentAlerts: AlertEvent[];
   domains: DomainProfile[];
+  profiles: MonitoringProfile[];
+  changeFeed: ChangeEvent[];
+  counts: {
+    changesToday: number;
+    newPages: number;
+    newEmails: number;
+    dnsChanges: number;
+    unread: number;
+  };
   health: {
     activeCrawls: number;
     monitoredDomains: number;
     failedCrawls24h: number;
+  };
+}
+
+export interface WorkspaceSettings {
+  account: { name: string; email: string; profileImage: string };
+  workspace: { name: string; logo: string };
+  notifications: {
+    inApp: 'all' | 'important' | 'disabled';
+    email: 'instant' | 'daily' | 'weekly' | 'disabled';
+    events: {
+      pricingChanges: boolean;
+      emailDiscoveries: boolean;
+      dnsChanges: boolean;
+      whoisChanges: boolean;
+      techStackChanges: boolean;
+      newPages: boolean;
+    };
+  };
+  crawling: {
+    defaultDepth: number;
+    maxPages: number;
+    respectRobots: boolean;
+    crawlDelaySeconds: number;
+    userAgentMode: 'default' | 'custom';
+    customUserAgent: string;
+  };
+  monitoring: {
+    preset: MonitoringProfile['monitoringType'];
+    defaultFrequency: 'daily' | 'weekly' | 'monthly';
+    autoMonitorImportantPages: boolean;
+    sensitivity: 'low' | 'medium' | 'high';
+  };
+  dataRetention: {
+    retentionDays: 30 | 90 | 180 | 365;
+    autoDelete: boolean;
+    exportFormat: 'csv' | 'json';
+  };
+  integrations: {
+    webhookUrl: string;
+    webhookSecret: string;
+    webhookEvents: string[];
+  };
+  appearance: {
+    theme: 'light' | 'dark' | 'system';
+    density: 'comfortable' | 'compact';
   };
 }
