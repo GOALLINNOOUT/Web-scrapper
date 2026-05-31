@@ -9,10 +9,11 @@ export const config = {
   mongodbUri: process.env.MONGODB_URI || '',
   redisUrl: process.env.REDIS_URL || '',
   performanceMode: process.env.PERFORMANCE_MODE || 'development',
+  targetCrawlPagesPerSecond: clamp(process.env.TARGET_CRAWL_PAGES_PER_SECOND, 1, 100_000, 50),
   webWorkers: clamp(process.env.WEB_WORKERS, 1, 64, 0),
   crawlJobWorkerConcurrency: clamp(process.env.CRAWL_JOB_WORKER_CONCURRENCY, 1, 50, 4),
-  crawlPageWorkerConcurrency: clamp(process.env.CRAWL_PAGE_WORKER_CONCURRENCY || process.env.WORKER_CONCURRENCY, 1, 1000, 100),
-  crawlPageWorkerRate: clamp(process.env.CRAWL_PAGE_WORKER_RATE, 1, 100_000, 1000),
+  crawlPageWorkerConcurrency: clamp(process.env.CRAWL_PAGE_WORKER_CONCURRENCY || process.env.WORKER_CONCURRENCY, 1, 1000, 200),
+  crawlPageWorkerRate: clamp(process.env.CRAWL_PAGE_WORKER_RATE, 1, 100_000, 50),
   crawlerUserAgent: process.env.CRAWLER_USER_AGENT || 'WebIntelligenceCrawler/1.0',
   crawlerUserAgentPool: parseList(process.env.CRAWLER_USER_AGENT_POOL),
   crawlerProxyUrls: parseList(process.env.CRAWLER_PROXY_URLS),
@@ -20,6 +21,11 @@ export const config = {
   crawlerRespectRobots: process.env.CRAWLER_RESPECT_ROBOTS !== 'false',
   crawlerDomainConcurrency: clamp(process.env.CRAWLER_DOMAIN_CONCURRENCY, 1, 1000, 4),
   crawlerDomainRatePerSecond: clamp(process.env.CRAWLER_DOMAIN_RATE_PER_SECOND, 1, 10_000, 5),
+  crawlerRenderConcurrency: clamp(process.env.CRAWLER_RENDER_CONCURRENCY, 0, 500, 4),
+  crawlerRenderRate: clamp(process.env.CRAWLER_RENDER_RATE, 1, 10_000, 10),
+  crawlerRenderTimeoutMs: clamp(process.env.CRAWLER_RENDER_TIMEOUT_MS, 1_000, 120_000, 15_000),
+  crawlerRenderQueueMax: clamp(process.env.CRAWLER_RENDER_QUEUE_MAX, 0, 100_000, 500),
+  crawlerBlockRenderAssets: process.env.CRAWLER_BLOCK_RENDER_ASSETS !== 'false',
   domainEnrichmentConcurrency: clamp(process.env.DOMAIN_ENRICHMENT_CONCURRENCY, 1, 50, 4),
   maxCrawlDepth: clamp(process.env.MAX_CRAWL_DEPTH, 0, 10, 10),
   maxPagesPerJob: clamp(process.env.MAX_PAGES_PER_JOB, 1, 100_000, 10_000),
@@ -35,10 +41,14 @@ export const config = {
   cacheTtlMetadataPreviewMs: clamp(process.env.CACHE_TTL_METADATA_PREVIEW_MS, 0, 86_400_000, 3_600_000)
 };
 
-function clamp(value: unknown, min: number, max: number, fallback: number) {
+export function clampConfigNumber(value: unknown, min: number, max: number, fallback: number) {
   const parsed = Number(value);
   if (!Number.isFinite(parsed)) return fallback;
   return Math.min(max, Math.max(min, Math.floor(parsed)));
+}
+
+function clamp(value: unknown, min: number, max: number, fallback: number) {
+  return clampConfigNumber(value, min, max, fallback);
 }
 
 function parseList(value: unknown) {

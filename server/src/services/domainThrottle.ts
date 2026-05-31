@@ -1,12 +1,16 @@
 import { config } from '../config/index.js';
 import { redisConnection } from '../queue/connection.js';
+import { observeHistogram } from '../utils/metrics.js';
 
 const SLOT_TTL_MS = 30_000;
 
 export async function waitForDomainTurn(domain: string) {
   if (!config.redisUrl) return () => undefined;
+  const startedAt = process.hrtime.bigint();
   await waitForDomainRate(domain);
-  return acquireDomainSlot(domain);
+  const release = await acquireDomainSlot(domain);
+  observeHistogram('webintel_domain_throttle_wait_seconds', 'Time spent waiting for per-domain crawl throttle', Number(process.hrtime.bigint() - startedAt) / 1_000_000_000, { domain });
+  return release;
 }
 
 async function waitForDomainRate(domain: string) {

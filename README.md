@@ -21,6 +21,35 @@ The API runs on `http://localhost:4000` and the dashboard runs on `http://localh
 - MongoDB: models include compound indexes for device/workspace, domain, classification, score, tech stack, crawl time, and contact discovery.
 - Security: crawl targets pass DNS-backed SSRF checks before network fetches; private/local targets are rejected.
 
+## 50 Pages/Second Profile
+
+The production defaults target 50 completed pages per second globally across worker containers:
+
+```bash
+PERFORMANCE_MODE=production
+REDIS_URL=redis://...
+TARGET_CRAWL_PAGES_PER_SECOND=50
+CRAWL_PAGE_WORKER_RATE=50
+CRAWL_PAGE_WORKER_CONCURRENCY=200
+HTTP_AGENT_MAX_SOCKETS=200
+CRAWLER_DOMAIN_RATE_PER_SECOND=5
+CRAWLER_DOMAIN_CONCURRENCY=4
+```
+
+The global rate is intentionally separate from per-domain politeness. A single site will not reach 50 pages/sec unless `CRAWLER_DOMAIN_RATE_PER_SECOND` and `CRAWLER_DOMAIN_CONCURRENCY` are raised for a target you own or have permission to crawl.
+
+JavaScript rendering remains a fallback path. HTTP fetches run first, and Playwright is used only when static HTML does not expose enough links. Keep render capacity bounded so heavy sites cannot starve normal page workers:
+
+```bash
+CRAWLER_RENDER_CONCURRENCY=4
+CRAWLER_RENDER_RATE=10
+CRAWLER_RENDER_TIMEOUT_MS=15000
+CRAWLER_RENDER_QUEUE_MAX=500
+CRAWLER_BLOCK_RENDER_ASSETS=true
+```
+
+Watch `/metrics` for `webintel_pages_crawled_total`, `webintel_page_fetch_mode_total`, `webintel_fetch_duration_seconds`, `webintel_render_duration_seconds`, `webintel_render_queue_depth`, `webintel_render_active`, `webintel_domain_throttle_wait_seconds`, and `webintel_queue_depth` while tuning workers.
+
 Docker and Nginx assets live in `docker/` and `nginx/`.
 
 ## Environment

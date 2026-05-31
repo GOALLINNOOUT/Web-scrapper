@@ -14,6 +14,7 @@
     "dev:client": "npm run dev --workspace client",
     "build": "npm run build --workspace server && npm run build --workspace client",
     "typecheck": "npm run typecheck --workspace server && npm run typecheck --workspace client",
-    "test": "npm run test --workspace server"
+    "test": "npm run test --workspace server",
+    "benchmark:crawl": "node scripts/crawl-benchmark.js"
   }
 }

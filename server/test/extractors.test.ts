@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import * as cheerio from 'cheerio';
 import { normalizeCrawlConfig } from '../src/crawler/config.js';
+import { clampConfigNumber } from '../src/config/index.js';
 import { extractEmails } from '../src/extractors/emails.js';
 import { extractLinks } from '../src/extractors/links.js';
 import { extractMetadata } from '../src/extractors/metadata.js';
@@ -9,6 +10,8 @@ import { extractSocialLinks } from '../src/extractors/social.js';
 import { detectTechStack } from '../src/extractors/techStack.js';
 import { isPrivateHost, isPrivateUrl } from '../src/middleware/ssrfProtection.js';
 import { sanitizeDeep } from '../src/middleware/inputSanitizer.js';
+import { shouldRenderFallback } from '../src/services/crawlPageProcessor.js';
+import type { CrawlConfig } from '../src/types.js';
 import { isSameDomain, normalizeUrl } from '../src/utils/url.js';
 
 test('normalizes URLs and rejects invalid schemes', () => {
@@ -200,6 +203,42 @@ test('validates and clamps crawl config', () => {
   assert.equal(config.discovery.renderWhenStaticLinksBelow, 20);
   assert.equal(config.extract.emails, false);
   assert.equal(config.extract.links, true);
+});
+
+test('clamps throughput and render config values', () => {
+  assert.equal(clampConfigNumber('0', 1, 100_000, 50), 1);
+  assert.equal(clampConfigNumber('100001', 1, 100_000, 50), 100_000);
+  assert.equal(clampConfigNumber('bad', 1, 100_000, 50), 50);
+  assert.equal(clampConfigNumber('4.9', 0, 500, 4), 4);
+});
+
+test('uses Playwright fallback only when static discovery is weak', () => {
+  const config: CrawlConfig = {
+    seedUrl: 'https://example.com',
+    maxPages: 100,
+    maxDepth: 2,
+    sameDomainOnly: true,
+    concurrency: 5,
+    discovery: {
+      sitemap: true,
+      renderJavaScript: true,
+      renderWhenStaticLinksBelow: 20,
+      includeMetaLinks: true
+    },
+    extract: {
+      links: true,
+      emails: true,
+      metadata: true,
+      social: true,
+      content: true
+    },
+    schedule: 'none'
+  };
+
+  assert.equal(shouldRenderFallback(config, 2), true);
+  assert.equal(shouldRenderFallback(config, 20), false);
+  assert.equal(shouldRenderFallback({ ...config, discovery: { ...config.discovery, renderJavaScript: false } }, 2), false);
+  assert.equal(shouldRenderFallback({ ...config, extract: { ...config.extract, links: false } }, 2), false);
 });
 
 test('blocks private SSRF host targets', () => {

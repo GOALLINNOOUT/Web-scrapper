@@ -106,13 +106,11 @@ export async function processCrawlPage(data: CrawlPageJobData, queues?: QueueBun
       includeMetaLinks: config.discovery.includeMetaLinks
     });
 
-    if (
-      config.extract.links
-      && config.discovery.renderJavaScript
-      && extracted.links.length < config.discovery.renderWhenStaticLinksBelow
-    ) {
+    let renderUsed = false;
+    if (shouldRenderFallback(config, extracted.links.length)) {
       const renderedSnapshot = await renderPageSnapshot(finalUrl);
       if (renderedSnapshot) {
+        renderUsed = true;
         const rendered = await runExtractorPipeline(renderedSnapshot.html, finalUrl, result.headers, {
           includeMetaLinks: config.discovery.includeMetaLinks
         });
@@ -123,6 +121,7 @@ export async function processCrawlPage(data: CrawlPageJobData, queues?: QueueBun
         };
       }
     }
+    incrementMetric('webintel_page_fetch_mode_total', 'Total crawled pages by fetch mode', { mode: renderUsed ? 'http_plus_render' : 'http_only' });
     breaker.recordSuccess();
 
     const reservedJob = await CrawlJob.findOneAndUpdate(
@@ -283,6 +282,14 @@ export async function processCrawlPage(data: CrawlPageJobData, queues?: QueueBun
     );
     return { failed: true, url: data.url, error: message };
   }
+}
+
+export function shouldRenderFallback(config: CrawlConfig, staticLinkCount: number) {
+  return Boolean(
+    config.extract.links
+    && config.discovery.renderJavaScript
+    && staticLinkCount < config.discovery.renderWhenStaticLinksBelow
+  );
 }
 
 async function maybeCompleteCrawl(deviceId: string, crawlId: string, queues?: QueueBundle, queueJobId = '') {

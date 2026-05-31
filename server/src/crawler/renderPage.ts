@@ -1,8 +1,14 @@
 import { logger } from '../utils/logger.js';
+import { config } from '../config/index.js';
+import { incrementMetric, observeHistogram, setGauge } from '../utils/metrics.js';
 import { getRequestIdentity, proxyKey, toPlaywrightProxy } from './requestIdentity.js';
 
 const browserPromises = new Map<string, Promise<unknown>>();
 let warnedMissingPlaywright = false;
+let activeRenderJobs = 0;
+const renderQueue: Array<() => void> = [];
+let renderWindowStartedAt = 0;
+let renderWindowCount = 0;
 
 export interface RenderedPageSnapshot {
   html: string;
@@ -16,6 +22,10 @@ export async function renderPageContent(url: string, signal?: AbortSignal): Prom
 
 export async function renderPageSnapshot(url: string, signal?: AbortSignal): Promise<RenderedPageSnapshot | null> {
   if (signal?.aborted) return null;
+  if (config.crawlerRenderConcurrency <= 0) {
+    incrementMetric('webintel_render_skipped_total', 'Total JavaScript render attempts skipped by reason', { reason: 'disabled' });
+    return null;
+  }
 
   const chromium = await loadChromium();
   if (!chromium) return null;
@@ -24,30 +34,132 @@ export async function renderPageSnapshot(url: string, signal?: AbortSignal): Pro
   const browser = await getBrowser(chromium, identity.proxy);
   if (!browser) return null;
 
-  const page = await (browser as BrowserLike).newPage({ userAgent: identity.userAgent }).catch(() => null);
-  if (!page) return null;
+  const releaseRenderSlot = await acquireRenderSlot(signal);
+  if (!releaseRenderSlot) return null;
 
-  const abort = () => {
-    page.close().catch(() => undefined);
-  };
-  signal?.addEventListener('abort', abort, { once: true });
+  const startedAt = process.hrtime.bigint();
+  incrementMetric('webintel_render_attempts_total', 'Total JavaScript render attempts', { status: 'started' });
+  let page: PageLike | null = null;
+
+  const renderController = new AbortController();
+  const timeout = setTimeout(() => renderController.abort(), config.crawlerRenderTimeoutMs);
+  timeout.unref();
 
   try {
-    await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 15_000 });
+    page = await (browser as BrowserLike).newPage({ userAgent: identity.userAgent }).catch(() => null);
+    if (!page) {
+      incrementMetric('webintel_render_attempts_total', 'Total JavaScript render attempts', { status: 'failed_to_open_page' });
+      return null;
+    }
+    if (config.crawlerBlockRenderAssets && typeof page.route === 'function') {
+      await page.route('**/*', (route) => {
+        const request = route.request();
+        if (['image', 'media', 'font', 'stylesheet'].includes(request.resourceType())) {
+          return route.abort().catch(() => undefined);
+        }
+        return route.continue().catch(() => undefined);
+      }).catch(() => undefined);
+    }
+    const abort = () => {
+      renderController.abort();
+      page?.close().catch(() => undefined);
+    };
+    signal?.addEventListener('abort', abort, { once: true });
+    renderController.signal.addEventListener('abort', abort, { once: true });
+    if (renderController.signal.aborted || signal?.aborted) return null;
+
+    await page.goto(url, { waitUntil: 'domcontentloaded', timeout: config.crawlerRenderTimeoutMs });
     await page.waitForLoadState('networkidle', { timeout: 5_000 }).catch(() => undefined);
     await page.waitForTimeout(Number(process.env.CRAWLER_RENDER_SETTLE_MS || 750)).catch(() => undefined);
-    if (signal?.aborted) return null;
+    if (signal?.aborted || renderController.signal.aborted) return null;
     const [html, techStack] = await Promise.all([
       page.content(),
       detectRuntimeTech(page).catch(() => [])
     ]);
+    observeHistogram('webintel_render_duration_seconds', 'JavaScript render duration in seconds', Number(process.hrtime.bigint() - startedAt) / 1_000_000_000, { status: 'rendered' });
+    incrementMetric('webintel_render_attempts_total', 'Total JavaScript render attempts', { status: 'rendered' });
     return { html, techStack };
   } catch {
+    const status = renderController.signal.aborted ? 'timeout' : 'failed';
+    observeHistogram('webintel_render_duration_seconds', 'JavaScript render duration in seconds', Number(process.hrtime.bigint() - startedAt) / 1_000_000_000, { status });
+    incrementMetric('webintel_render_attempts_total', 'Total JavaScript render attempts', { status });
     return null;
   } finally {
-    signal?.removeEventListener('abort', abort);
-    await page.close().catch(() => undefined);
+    clearTimeout(timeout);
+    await page?.close().catch(() => undefined);
+    releaseRenderSlot();
   }
+}
+
+async function acquireRenderSlot(signal?: AbortSignal) {
+  await waitForRenderRate(signal);
+  if (signal?.aborted) return null;
+  if (activeRenderJobs < config.crawlerRenderConcurrency) {
+    activeRenderJobs += 1;
+    updateRenderGauges();
+    return releaseRenderSlot;
+  }
+  if (renderQueue.length >= config.crawlerRenderQueueMax) {
+    logger.warn({ activeRenderJobs, queueDepth: renderQueue.length, limit: config.crawlerRenderQueueMax }, 'JavaScript rendering skipped because render queue is full');
+    incrementMetric('webintel_render_skipped_total', 'Total JavaScript render attempts skipped by reason', { reason: 'queue_full' });
+    return null;
+  }
+
+  return new Promise<(() => void) | null>((resolve) => {
+    const waiter = () => {
+      if (signal?.aborted) {
+        resolve(null);
+        return;
+      }
+      activeRenderJobs += 1;
+      updateRenderGauges();
+      resolve(releaseRenderSlot);
+    };
+    const abort = () => {
+      const index = renderQueue.indexOf(waiter);
+      if (index >= 0) renderQueue.splice(index, 1);
+      updateRenderGauges();
+      resolve(null);
+    };
+    signal?.addEventListener('abort', abort, { once: true });
+    renderQueue.push(waiter);
+    updateRenderGauges();
+  });
+}
+
+function releaseRenderSlot() {
+  activeRenderJobs = Math.max(0, activeRenderJobs - 1);
+  const next = renderQueue.shift();
+  updateRenderGauges();
+  if (next) next();
+}
+
+async function waitForRenderRate(signal?: AbortSignal) {
+  const now = Date.now();
+  if (now - renderWindowStartedAt >= 1000) {
+    renderWindowStartedAt = now;
+    renderWindowCount = 0;
+  }
+  renderWindowCount += 1;
+  if (renderWindowCount <= config.crawlerRenderRate) return;
+  const delay = Math.max(0, 1000 - (now - renderWindowStartedAt));
+  await sleep(delay, signal);
+}
+
+function updateRenderGauges() {
+  setGauge('webintel_render_active', 'Current active JavaScript render jobs', {}, activeRenderJobs);
+  setGauge('webintel_render_queue_depth', 'Current JavaScript render queue depth', {}, renderQueue.length);
+}
+
+function sleep(ms: number, signal?: AbortSignal) {
+  return new Promise<void>((resolve) => {
+    const timer = setTimeout(resolve, ms);
+    const abort = () => {
+      clearTimeout(timer);
+      resolve();
+    };
+    signal?.addEventListener('abort', abort, { once: true });
+  });
 }
 
 async function detectRuntimeTech(page: PageLike) {
@@ -132,10 +244,17 @@ interface BrowserLike {
 }
 
 interface PageLike {
+  route?: (pattern: string, handler: (route: RouteLike) => unknown) => Promise<unknown>;
   goto: (url: string, options: { waitUntil: 'domcontentloaded'; timeout: number }) => Promise<unknown>;
   waitForLoadState: (state: 'networkidle', options: { timeout: number }) => Promise<unknown>;
   waitForTimeout: (timeout: number) => Promise<unknown>;
   evaluate: <T>(callback: () => T) => Promise<T>;
   content: () => Promise<string>;
   close: () => Promise<unknown>;
+}
+
+interface RouteLike {
+  request: () => { resourceType: () => string };
+  abort: () => Promise<unknown>;
+  continue: () => Promise<unknown>;
 }
