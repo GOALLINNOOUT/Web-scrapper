@@ -91,6 +91,9 @@ async function detectRuntimeTech(page: PageLike) {
 
 async function loadChromium(): Promise<ChromiumLike | null> {
   try {
+    if (process.env.NODE_ENV === 'production' && !process.env.PLAYWRIGHT_BROWSERS_PATH) {
+      process.env.PLAYWRIGHT_BROWSERS_PATH = '0';
+    }
     const module = await import('playwright');
     return module.chromium as ChromiumLike;
   } catch {
