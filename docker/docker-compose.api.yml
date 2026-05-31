@@ -1,0 +1,24 @@
+services:
+  api:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.api
+    expose:
+      - "4000"
+    healthcheck:
+      test: ["CMD-SHELL", "node -e \"fetch('http://127.0.0.1:4000/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))\""]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      PERFORMANCE_MODE: production
+      PORT: 4000
+      WEB_WORKERS: ${WEB_WORKERS:-1}
+      MONGODB_URI: ${MONGODB_URI}
+      REDIS_URL: ${REDIS_URL}
+      CLIENT_ORIGIN: ${CLIENT_ORIGIN}
+      START_WORKERS_IN_API: "false"
+      CRAWLER_RESPECT_ROBOTS: ${CRAWLER_RESPECT_ROBOTS:-false}

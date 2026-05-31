@@ -30,7 +30,7 @@ services:
           name: web-intel-redis
           property: connectionString
       - key: CRAWLER_RESPECT_ROBOTS
-        value: "true"
+        value: "false"
       - key: CRAWLER_USER_AGENT
         value: WebIntelligenceCrawler/1.0
 
@@ -62,6 +62,6 @@ services:
       - key: CRAWLER_DOMAIN_RATE_PER_SECOND
         value: "5"
       - key: CRAWLER_RESPECT_ROBOTS
-        value: "true"
+        value: "false"
       - key: CRAWLER_USER_AGENT
         value: WebIntelligenceCrawler/1.0

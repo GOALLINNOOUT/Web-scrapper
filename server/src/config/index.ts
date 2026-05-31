@@ -18,7 +18,7 @@ export const config = {
   crawlerUserAgentPool: parseList(process.env.CRAWLER_USER_AGENT_POOL),
   crawlerProxyUrls: parseList(process.env.CRAWLER_PROXY_URLS),
   crawlerMaxContentBytes: clamp(process.env.CRAWLER_MAX_CONTENT_BYTES, 1024 * 128, 1024 * 1024 * 100, 5 * 1024 * 1024),
-  crawlerRespectRobots: process.env.CRAWLER_RESPECT_ROBOTS !== 'false',
+  crawlerRespectRobots: process.env.CRAWLER_RESPECT_ROBOTS === 'true',
   crawlerDomainConcurrency: clamp(process.env.CRAWLER_DOMAIN_CONCURRENCY, 1, 1000, 4),
   crawlerDomainRatePerSecond: clamp(process.env.CRAWLER_DOMAIN_RATE_PER_SECOND, 1, 10_000, 5),
   crawlerRenderConcurrency: clamp(process.env.CRAWLER_RENDER_CONCURRENCY, 0, 500, 4),
