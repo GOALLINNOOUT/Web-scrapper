@@ -93,10 +93,18 @@ export function crawlRouter({ crawlManager }: { crawlManager: CrawlManager }) {
       const job = await CrawlJob.findOne({ _id: req.params.id, deviceId: req.deviceId }).lean();
       if (!job) return res.status(404).json({ error: 'NOT_FOUND', message: 'Crawl job not found' });
 
-      const summary = await withCache(`crawl:summary:${req.deviceId}:${req.params.id}`, config.cacheTtlDataMs, async () => (
-        await CrawlSummary.findOne({ deviceId: req.deviceId, crawlId: req.params.id }).lean()
-          || await rebuildCrawlSummary(req.deviceId, String(req.params.id))
-      ));
+      const summary = await withCache(`crawl:summary:${req.deviceId}:${req.params.id}`, config.cacheTtlDataMs, async () => {
+        const existing = await CrawlSummary.findOne({ deviceId: req.deviceId, crawlId: req.params.id }).lean();
+        if (!existing) return rebuildCrawlSummary(req.deviceId, String(req.params.id));
+
+        const hasRawEmails = (job.emailsFound || 0) > 0 || (existing.counts?.rawEmailOccurrences || 0) > 0;
+        const hasRawSocials = (job.socialLinksFound || 0) > 0 || (existing.counts?.rawSocialOccurrences || 0) > 0;
+        const missingEmailSummary = hasRawEmails && (existing.emails || []).length === 0 && (existing.emailOccurrences || []).length === 0;
+        const missingSocialSummary = hasRawSocials && (existing.socials || []).length === 0 && (existing.socialOccurrences || []).length === 0;
+        return missingEmailSummary || missingSocialSummary
+          ? rebuildCrawlSummary(req.deviceId, String(req.params.id))
+          : existing;
+      });
 
       res.json({
         crawlId: req.params.id,

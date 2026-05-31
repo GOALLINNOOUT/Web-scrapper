@@ -238,6 +238,11 @@ export interface MonitoringPageConfig {
   lastCheckedAt?: string | null;
 }
 
+export interface MonitoringSuggestion extends MonitoringPageConfig {
+  domain: string;
+  lastCrawledAt?: string;
+}
+
 export interface MonitoringProfile {
   _id: string;
   deviceId: string;
@@ -276,6 +281,7 @@ export interface MonitoringSummary {
   recentAlerts: AlertEvent[];
   domains: DomainProfile[];
   profiles: MonitoringProfile[];
+  suggestedPages: MonitoringSuggestion[];
   changeFeed: ChangeEvent[];
   counts: {
     changesToday: number;

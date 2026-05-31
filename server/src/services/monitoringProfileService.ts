@@ -52,7 +52,8 @@ export async function createMonitoringProfile(input: {
 
 export async function refreshRecommendedPages(deviceId: string, domain: string) {
   const profile = await MonitoringProfile.findOne({ deviceId, domain }).lean();
-  const recommendedPages = await recommendPages(deviceId, domain, profile?.seedUrl || `https://${domain}/`);
+  const excludeUrls = new Set((profile?.monitoredPages || []).map((page) => page.url));
+  const recommendedPages = await recommendPages(deviceId, domain, profile?.seedUrl || `https://${domain}/`, excludeUrls);
   return MonitoringProfile.findOneAndUpdate(
     { deviceId, domain },
     { $set: { recommendedPages } },
@@ -71,10 +72,11 @@ export async function acceptRecommendations(deviceId: string, profileId: string)
   );
 }
 
-export async function recommendPages(deviceId: string, domain: string, seedUrl: string) {
+export async function recommendPages(deviceId: string, domain: string, seedUrl: string, excludeUrls = new Set<string>()) {
   const pages = await Page.find({ deviceId, domain, status: 'crawled' }, { url: 1, metadata: 1, score: 1 }).sort({ score: -1 }).limit(200).lean();
   const byUrl = new Map<string, { url: string; label: string; reason: string; score: number; enabled: boolean; signals: string[] }>();
   for (const page of pages) {
+    if (excludeUrls.has(page.url)) continue;
     const candidate = scoreMonitoringCandidate(page.url, Number(page.score || 0), page.metadata?.title);
     if (candidate.score < 50) continue;
     byUrl.set(page.url, { ...candidate, url: page.url, enabled: true, signals: ['content', 'metadata', 'emails', 'social', 'tech'] });
@@ -84,12 +86,97 @@ export async function recommendPages(deviceId: string, domain: string, seedUrl: 
     for (const path of ['/pricing', '/careers', '/contact', '/products', '/blog', '/about']) {
       const url = normalizeUrl(path, seedUrl);
       if (!url) continue;
+      if (excludeUrls.has(url)) continue;
       const candidate = scoreMonitoringCandidate(url, 0);
       byUrl.set(url, { ...candidate, url, enabled: true, signals: ['content', 'metadata', 'emails', 'social', 'tech'] });
     }
   }
 
-  return [...byUrl.values()].sort((left, right) => right.score - left.score).slice(0, 12);
+  return [...byUrl.values()].sort((left, right) => right.score - left.score).slice(0, 15);
+}
+
+export async function getWorkspaceMonitoringSuggestions(deviceId: string, limit = 15) {
+  const profiles = await MonitoringProfile.find({ deviceId }, { monitoredPages: 1, recommendedPages: 1 }).lean();
+  const excludedUrls = new Set<string>();
+  for (const profile of profiles) {
+    for (const page of [...(profile.monitoredPages || []), ...(profile.recommendedPages || [])]) {
+      excludedUrls.add(page.url);
+    }
+  }
+
+  const pages = await Page.find(
+    { deviceId, status: 'crawled', url: { $nin: [...excludedUrls] } },
+    { url: 1, domain: 1, metadata: 1, score: 1, crawledAt: 1 }
+  ).sort({ score: -1, crawledAt: -1 }).limit(400).lean();
+
+  const byUrl = new Map<string, {
+    url: string;
+    domain: string;
+    label: string;
+    reason: string;
+    score: number;
+    enabled: boolean;
+    signals: string[];
+    lastCrawledAt?: Date;
+  }>();
+
+  for (const page of pages) {
+    if (byUrl.has(page.url)) continue;
+    const candidate = scoreMonitoringCandidate(page.url, Number(page.score || 0), page.metadata?.title);
+    if (candidate.score < 50) continue;
+    byUrl.set(page.url, {
+      ...candidate,
+      url: page.url,
+      domain: page.domain,
+      enabled: true,
+      signals: ['content', 'metadata', 'emails', 'social', 'tech'],
+      lastCrawledAt: page.crawledAt
+    });
+    if (byUrl.size >= limit) break;
+  }
+
+  return [...byUrl.values()];
+}
+
+export async function acceptWorkspaceSuggestion(deviceId: string, url: string, monitoringType: MonitoringType = 'seo_monitoring') {
+  const page = await Page.findOne({ deviceId, url, status: 'crawled' }, { url: 1, domain: 1, metadata: 1, score: 1 }).sort({ crawledAt: -1 }).lean();
+  if (!page) return null;
+
+  const candidate = scoreMonitoringCandidate(page.url, Number(page.score || 0), page.metadata?.title);
+  const monitoredPage = {
+    ...candidate,
+    url: page.url,
+    enabled: true,
+    signals: ['content', 'metadata', 'emails', 'social', 'tech']
+  };
+  const seedUrl = `https://${page.domain}/`;
+
+  await MonitoringProfile.updateOne(
+    { deviceId, domain: page.domain },
+    {
+      $setOnInsert: {
+        deviceId,
+        workspaceId: deviceId,
+        domain: page.domain,
+        seedUrl,
+        recommendedPages: []
+      },
+      $set: {
+        monitoringType,
+        schedule: 'daily',
+        sensitivity: 'medium',
+        enabled: true
+      },
+      $addToSet: { monitoredPages: monitoredPage }
+    },
+    { upsert: true }
+  );
+
+  return MonitoringProfile.findOneAndUpdate(
+    { deviceId, domain: page.domain },
+    { $pull: { recommendedPages: { url: page.url } } },
+    { new: true }
+  );
 }
 
 export function scoreMonitoringCandidate(url: string, pageScore = 0, title = '') {

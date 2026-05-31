@@ -10,7 +10,9 @@ import { config } from '../config/index.js';
 import { withCache } from '../utils/cache.js';
 import {
   acceptRecommendations,
+  acceptWorkspaceSuggestion,
   createMonitoringProfile,
+  getWorkspaceMonitoringSuggestions,
   refreshRecommendedPages,
   type MonitoringType
 } from '../services/monitoringProfileService.js';
@@ -25,13 +27,14 @@ export function monitoringRouter({ crawlManager }: { crawlManager: CrawlManager 
     try {
       const payload = await withCache(`monitoring:${req.deviceId}`, config.cacheTtlMonitoringMs, async () => {
         const since = new Date(Date.now() - 24 * 60 * 60 * 1000);
-        const [activeCrawls, recentAlerts, domains, failedCrawls, profiles, events] = await Promise.all([
+        const [activeCrawls, recentAlerts, domains, failedCrawls, profiles, events, suggestedPages] = await Promise.all([
           CrawlJob.find({ deviceId: req.deviceId, status: { $in: ['queued', 'running', 'paused'] } }).sort({ createdAt: -1 }).limit(25).lean(),
           AlertEvent.find({ deviceId: req.deviceId }).sort({ createdAt: -1 }).limit(100).lean(),
           DomainProfile.find({ deviceId: req.deviceId }).sort({ lastCrawledAt: -1 }).limit(25).lean(),
           CrawlJob.countDocuments({ deviceId: req.deviceId, status: 'failed', updatedAt: { $gte: since } }),
           MonitoringProfile.find({ deviceId: req.deviceId }).sort({ updatedAt: -1 }).limit(100).lean(),
-          ChangeEvent.find({ deviceId: req.deviceId }).sort({ detectedAt: -1 }).limit(100).lean()
+          ChangeEvent.find({ deviceId: req.deviceId }).sort({ detectedAt: -1 }).limit(100).lean(),
+          getWorkspaceMonitoringSuggestions(req.deviceId, 15)
         ]);
 
         const decryptedEvents = events.map((event) => decryptChangeEvent(event));
@@ -41,6 +44,7 @@ export function monitoringRouter({ crawlManager }: { crawlManager: CrawlManager 
           recentAlerts: dedupeAlerts(recentAlerts).slice(0, 25),
           domains,
           profiles,
+          suggestedPages,
           changeFeed: decryptedEvents,
           counts: {
             changesToday: decryptedEvents.filter((event) => new Date(event.detectedAt).getTime() >= since.getTime()).length,
@@ -93,11 +97,29 @@ export function monitoringRouter({ crawlManager }: { crawlManager: CrawlManager 
     }
   });
 
+  router.post('/suggestions/accept', async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const profile = await acceptWorkspaceSuggestion(
+        req.deviceId,
+        String(req.body?.url || ''),
+        req.body?.monitoringType as MonitoringType | undefined
+      );
+      if (!profile) return res.status(404).json({ message: 'Suggested page not found' });
+      await invalidateWorkspaceReads(req.deviceId).catch(() => undefined);
+      res.status(201).json(profile);
+    } catch (error) {
+      next(error);
+    }
+  });
+
   router.get('/profiles/:domain', async (req: Request, res: Response, next: NextFunction) => {
     try {
       const domain = String(req.params.domain || '').toLowerCase();
-      const profile = await refreshRecommendedPages(req.deviceId, domain)
-        || await MonitoringProfile.findOne({ deviceId: req.deviceId, domain }).lean();
+      const existingProfile = await MonitoringProfile.findOne({ deviceId: req.deviceId, domain }).lean();
+      const shouldRefresh = existingProfile && (existingProfile.monitoredPages || []).length === 0 && (existingProfile.recommendedPages || []).length === 0;
+      const profile = shouldRefresh
+        ? await refreshRecommendedPages(req.deviceId, domain)
+        : existingProfile;
       if (!profile) return res.status(404).json({ message: 'Monitoring profile not found' });
       const [events, domainProfile] = await Promise.all([
         ChangeEvent.find({ deviceId: req.deviceId, domain }).sort({ detectedAt: -1 }).limit(100).lean(),

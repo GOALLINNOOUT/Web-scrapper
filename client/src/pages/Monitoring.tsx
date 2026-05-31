@@ -1,4 +1,4 @@
-import { Activity, Bell, Check, CheckCircle2, ChevronRight, Eye, Globe2, LoaderCircle, Mail, Plus, Radar, Search, Sparkles, X } from 'lucide-react';
+import { Activity, Bell, Check, CheckCircle2, ChevronRight, Eye, Globe2, LoaderCircle, Mail, Plus, Radar, Search, Sparkles, Wand2, X } from 'lucide-react';
 import type { FormEvent } from 'react';
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
@@ -25,6 +25,8 @@ export function Monitoring() {
   const [isAdding, setIsAdding] = useState(false);
   const [isLoadingDetail, setIsLoadingDetail] = useState(false);
   const [isSavingRecommendations, setIsSavingRecommendations] = useState(false);
+  const [acceptingSuggestionUrl, setAcceptingSuggestionUrl] = useState('');
+  const [suggestionsCollapsed, setSuggestionsCollapsed] = useState(false);
   const [selectedRecommendationUrls, setSelectedRecommendationUrls] = useState<Set<string>>(new Set());
 
   async function load() {
@@ -141,6 +143,19 @@ export function Monitoring() {
     showToast({ title: 'Recommendation dismissed', description: updated.domain, tone: 'message' });
   }
 
+  async function acceptSuggestedPage(url: string) {
+    setAcceptingSuggestionUrl(url);
+    try {
+      const profile = await api.acceptMonitoringSuggestion({ url, monitoringType: 'seo_monitoring' });
+      await load();
+      setActiveDomain(profile.domain);
+      await refreshProfile(profile.domain);
+      showToast({ title: 'Page added to monitoring', description: profile.domain, tone: 'success' });
+    } finally {
+      setAcceptingSuggestionUrl('');
+    }
+  }
+
   const groupedEvents = useMemo(() => groupEvents(summary?.changeFeed || []), [summary]);
 
   if (isLoading || !summary) return <LoadingState title="Loading intelligence feed" rows={7} />;
@@ -193,6 +208,44 @@ export function Monitoring() {
         </section>
 
         <aside className="grid h-fit min-w-0 gap-5">
+          {summary.suggestedPages.length > 0 ? (
+            <section className="min-w-0 rounded-lg border border-[#eaeae6] bg-white p-5 shadow-panel">
+              <button className="mb-4 flex w-full min-w-0 items-center justify-between gap-3 text-left" onClick={() => setSuggestionsCollapsed((value) => !value)} type="button" aria-expanded={!suggestionsCollapsed}>
+                <div>
+                  <h2 className="flex items-center gap-2 text-xl font-extrabold">
+                    Suggested from previous crawls
+                    <span className="rounded-md bg-[#ebf2ff] px-2 py-1 text-xs font-extrabold text-brand-700">{summary.suggestedPages.length}</span>
+                  </h2>
+                  <p className="mt-1 text-sm font-semibold text-[#636360]">Up to 15 page suggestions per day.</p>
+                </div>
+                <span className="flex shrink-0 items-center gap-2 text-brand-600">
+                  <Wand2 size={19} />
+                  <ChevronRight className={`transition ${suggestionsCollapsed ? '' : 'rotate-90'}`} size={16} />
+                </span>
+              </button>
+              {!suggestionsCollapsed ? (
+                <div className="grid max-h-[420px] gap-2 overflow-y-auto pr-1">
+                  {summary.suggestedPages.map((page) => (
+                    <article className="grid min-w-0 gap-2 rounded-lg bg-[#f5f5f2] p-3" key={page.url}>
+                      <div className="flex min-w-0 items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <strong className="block truncate">{page.label}</strong>
+                          <span className="mt-1 block truncate text-xs font-bold text-[#636360]">{page.domain}</span>
+                        </div>
+                        <span className="shrink-0 text-xs font-extrabold text-brand-700">{page.score}</span>
+                      </div>
+                      <p className="line-clamp-2 text-xs font-semibold text-[#636360]">{page.reason}</p>
+                      <button className="inline-flex min-h-9 w-fit items-center gap-2 rounded-md bg-white px-3 text-xs font-extrabold text-brand-700 transition hover:bg-[#ebf2ff] disabled:cursor-wait disabled:opacity-60" disabled={acceptingSuggestionUrl === page.url} onClick={() => acceptSuggestedPage(page.url)} type="button">
+                        {acceptingSuggestionUrl === page.url ? <LoaderCircle className="animate-spin" size={14} /> : <Plus size={14} />}
+                        Monitor page
+                      </button>
+                    </article>
+                  ))}
+                </div>
+              ) : null}
+            </section>
+          ) : null}
+
           <section className="min-w-0 rounded-lg border border-[#eaeae6] bg-white p-5 shadow-panel">
             <h2 className="text-xl font-extrabold">Monitored domains</h2>
             <div className="mt-4 grid gap-2">

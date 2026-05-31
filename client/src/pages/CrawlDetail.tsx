@@ -107,10 +107,10 @@ export function CrawlDetail() {
       pageUrl: page.url
     }))
   ))), [pages]);
-  const emails = summary?.emails || loadedEmails;
-  const socials = summary?.socials || loadedSocials;
-  const emailOccurrences = summary?.emailOccurrences || loadedEmailOccurrences;
-  const socialOccurrences = summary?.socialOccurrences || loadedSocialOccurrences;
+  const emails = summary?.emails?.length ? summary.emails : loadedEmails;
+  const socials = summary?.socials?.some((group) => group.links.length > 0) ? summary.socials : loadedSocials;
+  const emailOccurrences = summary?.emailOccurrences?.length ? summary.emailOccurrences : loadedEmailOccurrences;
+  const socialOccurrences = summary?.socialOccurrences?.length ? summary.socialOccurrences : loadedSocialOccurrences;
   const rawEmailOccurrences = summary?.counts.rawEmailOccurrences ?? job?.emailsFound ?? emailOccurrences.length;
   const rawSocialOccurrences = summary?.counts.rawSocialOccurrences ?? job?.socialLinksFound ?? socialOccurrences.length;
 

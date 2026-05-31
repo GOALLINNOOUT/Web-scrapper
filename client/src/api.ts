@@ -124,6 +124,10 @@ export const api = {
     method: 'POST',
     body: JSON.stringify(payload)
   }),
+  acceptMonitoringSuggestion: (payload: { url: string; monitoringType?: MonitoringProfile['monitoringType'] }) => request<MonitoringProfile>('/monitoring/suggestions/accept', {
+    method: 'POST',
+    body: JSON.stringify(payload)
+  }),
   getMonitoringProfile: (domain: string) => request<{ profile: MonitoringProfile; events: ChangeEvent[]; domain?: DomainProfile }>(`/monitoring/profiles/${encodeURIComponent(domain)}`),
   updateMonitoringProfile: (id: string, payload: Partial<Pick<MonitoringProfile, 'monitoredPages' | 'recommendedPages' | 'schedule' | 'sensitivity' | 'enabled'>>) => request<MonitoringProfile>(`/monitoring/profiles/${id}`, {
     method: 'PATCH',
