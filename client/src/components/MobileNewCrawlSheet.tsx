@@ -27,7 +27,6 @@ export function MobileNewCrawlSheet({ open, onClose, onCreated }: MobileNewCrawl
   const [extractSocials, setExtractSocials] = useState(true);
   const [detectTechStack, setDetectTechStack] = useState(true);
   const [screenshots, setScreenshots] = useState(false);
-  const [schedule, setSchedule] = useState<CrawlConfig['schedule']>('none');
   const [isStarting, setIsStarting] = useState(false);
   const normalizedUrl = useMemo(() => normalizeSeedUrl(url), [url]);
   const hasTyped = url.trim().length > 0;
@@ -75,7 +74,7 @@ export function MobileNewCrawlSheet({ open, onClose, onCreated }: MobileNewCrawl
         sameDomainOnly,
         respectRobots,
         concurrency: 5,
-        schedule,
+        schedule: 'none',
         discovery: {
           sitemap: true,
           renderJavaScript: true,
@@ -186,26 +185,6 @@ export function MobileNewCrawlSheet({ open, onClose, onCreated }: MobileNewCrawl
             <Toggle label="Screenshots" checked={screenshots} onChange={setScreenshots} disabled />
           </div>
 
-          <fieldset className="mt-6">
-            <legend className="mb-2 text-[13px] font-medium text-[var(--text-primary)]">Schedule</legend>
-            <div className="grid grid-cols-3 rounded-[10px] bg-[var(--bg-raised)] p-1">
-              {[
-                ['none', 'One-time'],
-                ['daily', 'Daily'],
-                ['weekly', 'Weekly']
-              ].map(([value, label]) => (
-                <button
-                  aria-pressed={schedule === value}
-                  className={`h-9 rounded-lg text-[13px] font-semibold transition duration-200 ease-[var(--quart)] ${schedule === value ? 'bg-[var(--bg-base)] text-[var(--text-primary)] shadow-sm' : 'text-[var(--text-secondary)]'}`}
-                  key={value}
-                  type="button"
-                  onClick={() => setSchedule(value as CrawlConfig['schedule'])}
-                >
-                  {label}
-                </button>
-              ))}
-            </div>
-          </fieldset>
         </div>
 
         <div className="absolute bottom-0 left-0 right-0 border-t border-[var(--border-subtle)] bg-[var(--bg-base)] px-5 pb-[calc(16px+env(safe-area-inset-bottom))] pt-3">
