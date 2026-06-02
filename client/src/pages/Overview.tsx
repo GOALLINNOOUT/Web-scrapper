@@ -3,6 +3,7 @@ import { ArrowRight, ChevronDown, ExternalLink, Globe2, LinkIcon, LoaderCircle, 
 import { Link } from 'react-router-dom';
 import { api } from '../api.js';
 import { CrawlActionButtons } from '../components/CrawlActionButtons.jsx';
+import { ErrorState } from '../components/ErrorState.jsx';
 import { CrawlStatusBadge } from '../components/CrawlStatusBadge.jsx';
 import { LoadingState } from '../components/LoadingState.jsx';
 import { RetryCrawlButton } from '../components/RetryCrawlButton.jsx';
@@ -48,26 +49,33 @@ function DesktopOverview() {
   const [jobs, setJobs] = useState<CrawlJob[]>([]);
   const [pages, setPages] = useState<CrawlPage[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState<unknown>(null);
   const [isStarting, setIsStarting] = useState(false);
   const [selectedActivityId, setSelectedActivityId] = useState<string | null>(null);
 
   async function load() {
-    const [crawlJobs, data, settings] = await Promise.all([
-      api.listCrawls(),
-      api.getData({ limit: 25 }),
-      api.getSettings().catch(() => null)
-    ]);
-    setJobs(crawlJobs);
-    setPages(data.items);
-    if (settings) {
-      setConfig((current) => ({
-        ...current,
-        maxPages: settings.crawling.maxPages,
-        maxDepth: settings.crawling.defaultDepth,
-        respectRobots: settings.crawling.respectRobots
-      }));
+    setLoadError(null);
+    try {
+      const [crawlJobs, data, settings] = await Promise.all([
+        api.listCrawls(),
+        api.getData({ limit: 25 }),
+        api.getSettings().catch(() => null)
+      ]);
+      setJobs(crawlJobs);
+      setPages(data.items);
+      if (settings) {
+        setConfig((current) => ({
+          ...current,
+          maxPages: settings.crawling.maxPages,
+          maxDepth: settings.crawling.defaultDepth,
+          respectRobots: settings.crawling.respectRobots
+        }));
+      }
+    } catch (error) {
+      setLoadError(error);
+    } finally {
+      setIsLoading(false);
     }
-    setIsLoading(false);
   }
 
   useEffect(() => {
@@ -218,8 +226,9 @@ function DesktopOverview() {
       </header>
 
       {isLoading ? <LoadingState title="Loading today's workspace" /> : null}
+      {!isLoading && loadError ? <ErrorState error={loadError} title="Could not load Overview" onRetry={() => { setIsLoading(true); return load(); }} /> : null}
 
-      {!isLoading ? (
+      {!isLoading && !loadError ? (
         <>
         <div className="grid grid-cols-[minmax(0,1.1fr)_minmax(340px,0.9fr)] gap-5 max-[1100px]:grid-cols-1">
           <section className="desktop-card rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-base)] p-6 shadow-panel">

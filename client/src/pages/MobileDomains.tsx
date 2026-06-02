@@ -3,6 +3,7 @@ import { FormEvent, useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../api.js';
+import { ErrorState } from '../components/ErrorState.jsx';
 import { normalizeSeedUrl } from '../lib/seedUrl.js';
 import { showToast } from '../toast.js';
 import type { CrawlConfig, DomainProfile } from '../types.js';
@@ -23,14 +24,18 @@ export function MobileDomains() {
   const [activeDomain, setActiveDomain] = useState<DomainProfile | null>(null);
   const [query, setQuery] = useState('');
   const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState<unknown>(null);
   const [isLookingUp, setIsLookingUp] = useState(false);
   const [isEnriching, setIsEnriching] = useState(false);
   const [startingDomain, setStartingDomain] = useState('');
 
   useEffect(() => {
     api.getDomains()
-      .then((response) => setDomains(response.items))
-      .catch(console.error)
+      .then((response) => {
+        setDomains(response.items);
+        setLoadError(null);
+      })
+      .catch(setLoadError)
       .finally(() => setIsLoading(false));
   }, []);
 
@@ -91,9 +96,14 @@ export function MobileDomains() {
 
       <h2 className="mobile-section-label !px-0">Profiles</h2>
       {isLoading ? <div className="grid gap-2">{[0, 1, 2].map((item) => <span className="mobile-skeleton h-28 rounded-xl" key={item} />)}</div> : null}
-      {!isLoading && domains.length === 0 ? <div className="rounded-xl bg-[var(--bg-base)] p-8 text-center"><Globe2 className="mx-auto text-[var(--accent)]" size={34} /><p className="mt-3 text-sm font-semibold">No domains yet</p></div> : null}
+      {!isLoading && loadError ? <ErrorState error={loadError} title="Could not load domains" onRetry={() => {
+        setIsLoading(true);
+        setLoadError(null);
+        return api.getDomains().then((response) => setDomains(response.items)).catch(setLoadError).finally(() => setIsLoading(false));
+      }} /> : null}
+      {!isLoading && !loadError && domains.length === 0 ? <div className="rounded-xl bg-[var(--bg-base)] p-8 text-center"><Globe2 className="mx-auto text-[var(--accent)]" size={34} /><p className="mt-3 text-sm font-semibold">No domains yet</p></div> : null}
       <div className="grid gap-2">
-        {domains.map((domain) => (
+        {!loadError && domains.map((domain) => (
           <button className="mobile-crawl-card mobile-tap w-full text-left" key={domain.domain} type="button" onClick={() => setActiveDomain(domain)}>
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0">

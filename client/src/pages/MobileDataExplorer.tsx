@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { api } from '../api.js';
+import { ErrorState } from '../components/ErrorState.jsx';
 import { useDebouncedValue } from '../hooks/useDebouncedValue.js';
 import { formatRelativeTime, toDomain } from '../lib/format.js';
 import type { CrawlPage } from '../types.js';
@@ -29,6 +30,7 @@ export function MobileDataExplorer() {
   const [pages, setPages] = useState<CrawlPage[]>([]);
   const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState<unknown>(null);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [filtersOpen, setFiltersOpen] = useState(false);
   const debouncedFilters = useDebouncedValue(filters, 300);
@@ -36,6 +38,7 @@ export function MobileDataExplorer() {
   useEffect(() => {
     let cancelled = false;
     setIsLoading(true);
+    setLoadError(null);
     api.getData(toApiFilters(debouncedFilters))
       .then((data) => {
         if (!cancelled) {
@@ -43,7 +46,9 @@ export function MobileDataExplorer() {
           setNextCursor(data.nextCursor);
         }
       })
-      .catch(console.error)
+      .catch((error) => {
+        if (!cancelled) setLoadError(error);
+      })
       .finally(() => {
         if (!cancelled) setIsLoading(false);
       });
@@ -100,13 +105,14 @@ export function MobileDataExplorer() {
       </div>
 
       {isLoading ? <div className="mt-5 grid gap-2">{[0, 1, 2, 3].map((item) => <span className="mobile-skeleton h-20 rounded-xl" key={item} />)}</div> : null}
-      {!isLoading ? <ResultList
+      {!isLoading && loadError ? <div className="mt-5"><ErrorState error={loadError} title="Could not load archive data" onRetry={() => setFilters((current) => ({ ...current }))} /></div> : null}
+      {!isLoading && !loadError ? <ResultList
         mode={mode}
         pages={pages}
         rows={rows}
         onOpenPage={(page) => navigate(`/crawls/${page.crawlId}?page=${encodeURIComponent(page._id)}`, { state: { searchResult: page } })}
       /> : null}
-      {!isLoading && nextCursor ? <button className="mt-4 h-11 w-full rounded-xl bg-[var(--bg-base)] text-sm font-semibold text-[var(--accent)]" type="button" onClick={loadMore} disabled={isLoadingMore}>{isLoadingMore ? 'Fetching...' : 'Fetch more archive data'}</button> : null}
+      {!isLoading && !loadError && nextCursor ? <button className="mt-4 h-11 w-full rounded-xl bg-[var(--bg-base)] text-sm font-semibold text-[var(--accent)]" type="button" onClick={loadMore} disabled={isLoadingMore}>{isLoadingMore ? 'Fetching...' : 'Fetch more archive data'}</button> : null}
 
       <MobileFilterSheet open={filtersOpen} filters={filters} onChange={setFilters} onClose={() => setFiltersOpen(false)} />
     </div>

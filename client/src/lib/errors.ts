@@ -1,0 +1,56 @@
+export type AppErrorKind = 'offline' | 'timeout' | 'server' | 'rate_limit' | 'validation' | 'auth' | 'not_found' | 'unknown';
+
+export class AppError extends Error {
+  kind: AppErrorKind;
+  status?: number;
+  action: string;
+
+  constructor(message: string, options: { kind?: AppErrorKind; status?: number; action?: string } = {}) {
+    super(message);
+    this.name = 'AppError';
+    this.kind = options.kind || 'unknown';
+    this.status = options.status;
+    this.action = options.action || 'Try again. If it keeps happening, refresh the page.';
+  }
+}
+
+export function friendlyError(error: unknown) {
+  if (error instanceof AppError) return error;
+  if (error instanceof Error) {
+    if (!navigator.onLine) {
+      return new AppError('You are offline.', {
+        kind: 'offline',
+        action: 'Turn on Wi-Fi or mobile data, then try again.'
+      });
+    }
+    return new AppError(error.message || 'Something went wrong.', {
+      kind: 'unknown',
+      action: 'Try again. If it keeps happening, refresh the page.'
+    });
+  }
+  return new AppError('Something went wrong.', {
+    kind: 'unknown',
+    action: 'Try again. If it keeps happening, refresh the page.'
+  });
+}
+
+export function toastTitleForError(error: AppError) {
+  if (error.kind === 'offline') return 'You are offline';
+  if (error.kind === 'timeout') return 'Request timed out';
+  if (error.kind === 'rate_limit') return 'Too many requests';
+  if (error.kind === 'server') return 'Server unavailable';
+  if (error.kind === 'validation') return 'Check the input';
+  if (error.kind === 'not_found') return 'Not found';
+  if (error.kind === 'auth') return 'Session problem';
+  return 'Request failed';
+}
+
+export function appErrorFromResponse(status: number, message: string) {
+  if (status === 400 || status === 422) return new AppError(message, { status, kind: 'validation', action: 'Fix the highlighted input and try again.' });
+  if (status === 401 || status === 403) return new AppError(message, { status, kind: 'auth', action: 'Refresh the page. If access is still blocked, check your workspace session.' });
+  if (status === 404) return new AppError(message, { status, kind: 'not_found', action: 'Go back and reload the list, then try opening it again.' });
+  if (status === 408 || status === 504) return new AppError(message, { status, kind: 'timeout', action: 'Check your connection and retry.' });
+  if (status === 429) return new AppError(message, { status, kind: 'rate_limit', action: 'Wait a moment, then try again.' });
+  if (status >= 500) return new AppError(message, { status, kind: 'server', action: 'The server could not complete this. Retry in a moment.' });
+  return new AppError(message, { status, kind: 'unknown', action: 'Try again. If it keeps happening, refresh the page.' });
+}

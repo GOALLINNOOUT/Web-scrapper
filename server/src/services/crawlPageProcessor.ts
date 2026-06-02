@@ -282,6 +282,7 @@ export async function processCrawlPage(data: CrawlPageJobData, queues?: QueueBun
       },
       { upsert: true, new: true }
     );
+    await maybeCompleteCrawl(data.deviceId, data.crawlId, queues, queueJobId);
     return { failed: true, url: data.url, error: message };
   }
 }
@@ -312,14 +313,14 @@ async function maybeCompleteCrawl(deviceId: string, crawlId: string, queues?: Qu
   if (!job) return;
   if (job.requestedStop || job.requestedPause || ['stopped', 'paused', 'failed'].includes(job.status)) return;
   if ((job.pagesCrawled || 0) >= (job.config as unknown as CrawlConfig).maxPages) {
-    await completeCrawlIfNeeded(deviceId, crawlId, job.seedUrl);
+    await completeCrawlIfNeeded(deviceId, crawlId, job.seedUrl, job.pagesCrawled || 0);
     return;
   }
 
   if (queues) {
     const hasRemaining = await hasRemainingCrawlPageJobs(queues, crawlId, queueJobId);
-    if (!hasRemaining && (job.pagesCrawled || 0) > 0) {
-      await completeCrawlIfNeeded(deviceId, crawlId, job.seedUrl);
+    if (!hasRemaining) {
+      await completeCrawlIfNeeded(deviceId, crawlId, job.seedUrl, job.pagesCrawled || 0);
     }
   }
 }
@@ -336,7 +337,7 @@ async function hasRemainingCrawlPageJobs(queues: QueueBundle, crawlId: string, q
   return true;
 }
 
-async function completeCrawlIfNeeded(deviceId: string, crawlId: string, seedUrl: string) {
+async function completeCrawlIfNeeded(deviceId: string, crawlId: string, seedUrl: string, minimumPagesCrawled = 0) {
   const completed = await CrawlJob.findOneAndUpdate(
     {
       _id: crawlId,
@@ -345,11 +346,12 @@ async function completeCrawlIfNeeded(deviceId: string, crawlId: string, seedUrl:
       requestedStop: { $ne: true },
       requestedPause: { $ne: true }
     },
-    { $set: { status: 'completed', requestedPause: false, completedAt: new Date() } },
+    { $set: { status: 'completed', requestedPause: false, completedAt: new Date(), ...(minimumPagesCrawled > 0 ? { pagesCrawled: minimumPagesCrawled } : {}) } },
     { new: true }
   ).lean();
 
   if (completed) {
+    await invalidateCrawlReads(deviceId, crawlId, { publish: false }).catch(() => undefined);
     await publishLiveEvent({
       type: 'crawl.updated',
       deviceId,

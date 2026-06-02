@@ -3,18 +3,27 @@ import type { LucideIcon } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { api } from '../api.js';
 import { LoadingState } from '../components/LoadingState.jsx';
+import { ErrorState } from '../components/ErrorState.jsx';
 import { showToast } from '../toast.js';
 import { storeTheme } from '../theme.js';
 import type { WorkspaceSettings } from '../types.js';
 
 export function MobileSettings() {
   const [settings, setSettings] = useState<WorkspaceSettings | null>(null);
+  const [loadError, setLoadError] = useState<unknown>(null);
   const [isSaving, setIsSaving] = useState(false);
 
   useEffect(() => {
-    api.getSettings().then(setSettings).catch(console.error);
+    api.getSettings().then((value) => {
+      setSettings(value);
+      setLoadError(null);
+    }).catch(setLoadError);
   }, []);
 
+  if (!settings && loadError) return <div className="px-4 pt-2"><ErrorState error={loadError} title="Could not load settings" onRetry={() => {
+    setLoadError(null);
+    return api.getSettings().then(setSettings).catch(setLoadError);
+  }} /></div>;
   if (!settings) return <div className="px-4"><LoadingState title="Loading settings" rows={5} /></div>;
 
   function update<K extends keyof WorkspaceSettings>(key: K, value: WorkspaceSettings[K]) {

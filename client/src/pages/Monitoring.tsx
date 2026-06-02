@@ -3,6 +3,7 @@ import type { FormEvent } from 'react';
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../api.js';
+import { ErrorState } from '../components/ErrorState.jsx';
 import { LoadingState } from '../components/LoadingState.jsx';
 import { useMediaQuery } from '../hooks/useMediaQuery.js';
 import { normalizeMonitorDomain } from '../lib/monitorDomain.js';
@@ -31,6 +32,7 @@ function DesktopMonitoring() {
   const [domain, setDomain] = useState('');
   const [monitoringType, setMonitoringType] = useState<MonitoringProfile['monitoringType']>('competitive_intelligence');
   const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState<unknown>(null);
   const [isAdding, setIsAdding] = useState(false);
   const [isLoadingDetail, setIsLoadingDetail] = useState(false);
   const [isSavingRecommendations, setIsSavingRecommendations] = useState(false);
@@ -42,9 +44,14 @@ function DesktopMonitoring() {
   const isValidDomain = Boolean(normalizedDomain);
 
   async function load() {
-    const data = await api.getMonitoring();
-    setSummary(data);
-    if (!activeDomain && data.profiles[0]) setActiveDomain(data.profiles[0].domain);
+    setLoadError(null);
+    try {
+      const data = await api.getMonitoring();
+      setSummary(data);
+      if (!activeDomain && data.profiles[0]) setActiveDomain(data.profiles[0].domain);
+    } catch (error) {
+      setLoadError(error);
+    }
   }
 
   useEffect(() => {
@@ -175,8 +182,10 @@ function DesktopMonitoring() {
   }
 
   const groupedEvents = useMemo(() => groupEvents(summary?.changeFeed || []), [summary]);
+  const activePendingRecommendations = domainDetail ? pendingRecommendations(domainDetail.profile) : [];
 
-  if (isLoading || !summary) return <LoadingState title="Loading intelligence feed" rows={7} />;
+  if (isLoading) return <LoadingState title="Loading intelligence feed" rows={7} />;
+  if (loadError || !summary) return <ErrorState error={loadError || new Error('Monitoring data was unavailable.')} title="Could not load monitoring" onRetry={() => { setIsLoading(true); return load().finally(() => setIsLoading(false)); }} />;
 
   return (
     <div className="desktop-page grid min-w-0 gap-6 overflow-x-hidden">
@@ -310,13 +319,15 @@ function DesktopMonitoring() {
                   <h2 className="truncate text-xl font-extrabold">{domainDetail.profile.domain}</h2>
                   <p className="mt-1 text-sm font-semibold text-[#636360]">{domainDetail.profile.monitoredPages.length} monitored pages</p>
                 </div>
-                <button className="inline-flex min-h-10 items-center gap-2 rounded-lg bg-[#f5f5f2] px-3 text-sm font-extrabold hover:bg-[#efefeb] disabled:cursor-wait disabled:opacity-65" disabled={isSavingRecommendations || pendingRecommendations(domainDetail.profile).length === 0 || selectedRecommendationUrls.size === 0} onClick={() => acceptRecommendations(domainDetail.profile)} type="button">
-                  {isSavingRecommendations ? <LoaderCircle className="animate-spin" size={15} /> : <CheckCircle2 size={15} />}
-                  {isSavingRecommendations ? 'Saving' : 'Accept'}
-                </button>
+                {activePendingRecommendations.length > 0 ? (
+                  <button className="inline-flex min-h-10 items-center gap-2 rounded-lg bg-[#f5f5f2] px-3 text-sm font-extrabold hover:bg-[#efefeb] disabled:cursor-wait disabled:opacity-65" disabled={isSavingRecommendations || selectedRecommendationUrls.size === 0} onClick={() => acceptRecommendations(domainDetail.profile)} type="button">
+                    {isSavingRecommendations ? <LoaderCircle className="animate-spin" size={15} /> : <CheckCircle2 size={15} />}
+                    {isSavingRecommendations ? 'Saving' : 'Accept'}
+                  </button>
+                ) : null}
               </div>
               <div className="mt-4 grid gap-3">
-                <PageList title="Recommended" pages={pendingRecommendations(domainDetail.profile)} selectedUrls={selectedRecommendationUrls} onToggle={toggleRecommendation} onDismiss={(url) => dismissRecommendation(domainDetail.profile, url)} />
+                <PageList title="Recommended" pages={activePendingRecommendations} selectedUrls={selectedRecommendationUrls} onToggle={toggleRecommendation} onDismiss={(url) => dismissRecommendation(domainDetail.profile, url)} />
                 <PageList title="Monitoring" pages={domainDetail.profile.monitoredPages} />
               </div>
             </section>

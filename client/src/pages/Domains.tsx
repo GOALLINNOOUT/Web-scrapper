@@ -2,6 +2,7 @@ import { CheckCircle2, ChevronDown, Globe2, LoaderCircle, Mail, Network, Play, R
 import { FormEvent, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../api.js';
+import { ErrorState } from '../components/ErrorState.jsx';
 import { LoadingState } from '../components/LoadingState.jsx';
 import { useMediaQuery } from '../hooks/useMediaQuery.js';
 import { normalizeSeedUrl } from '../lib/seedUrl.js';
@@ -42,6 +43,7 @@ function DesktopDomains() {
   const [query, setQuery] = useState('');
   const [queryError, setQueryError] = useState('');
   const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState<unknown>(null);
   const [isLookingUp, setIsLookingUp] = useState(false);
   const [isEnriching, setIsEnriching] = useState(false);
   const [isStartingCrawl, setIsStartingCrawl] = useState(false);
@@ -53,9 +55,12 @@ function DesktopDomains() {
         if (!cancelled) {
           setDomains(response.items);
           setActiveDomain(response.items[0] || null);
+          setLoadError(null);
         }
       })
-      .catch(console.error)
+      .catch((error) => {
+        if (!cancelled) setLoadError(error);
+      })
       .finally(() => {
         if (!cancelled) setIsLoading(false);
       });
@@ -155,7 +160,15 @@ function DesktopDomains() {
         {queryError ? <p className="col-span-2 px-2 text-sm font-bold text-red-700 max-[640px]:col-span-1">{queryError}</p> : null}
       </form>
 
-      {isLoading ? <LoadingState title="Loading domain profiles" rows={6} /> : (
+      {!isLoading && loadError ? <ErrorState error={loadError} title="Could not load domains" onRetry={() => {
+        setIsLoading(true);
+        setLoadError(null);
+        return api.getDomains().then((response) => {
+          setDomains(response.items);
+          setActiveDomain(response.items[0] || null);
+        }).catch(setLoadError).finally(() => setIsLoading(false));
+      }} /> : null}
+      {isLoading ? <LoadingState title="Loading domain profiles" rows={6} /> : !loadError ? (
         <div className="grid grid-cols-[360px_minmax(0,1fr)] gap-5 max-[1100px]:grid-cols-1">
           <section className="desktop-card rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-base)] p-4 shadow-panel">
             <div className="mb-4 flex items-center justify-between">
@@ -297,7 +310,7 @@ function DesktopDomains() {
             )}
           </section>
         </div>
-      )}
+      ) : null}
     </div>
   );
 }

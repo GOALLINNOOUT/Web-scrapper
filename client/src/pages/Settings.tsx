@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import type { ReactNode } from 'react';
 import { api } from '../api.js';
 import { LoadingState } from '../components/LoadingState.jsx';
+import { ErrorState } from '../components/ErrorState.jsx';
 import { useMediaQuery } from '../hooks/useMediaQuery.js';
 import { showToast } from '../toast.js';
 import { storeTheme } from '../theme.js';
@@ -29,13 +30,21 @@ export function Settings() {
 
 function DesktopSettings() {
   const [settings, setSettings] = useState<WorkspaceSettings | null>(null);
+  const [loadError, setLoadError] = useState<unknown>(null);
   const [active, setActive] = useState<typeof sections[number]['key']>('Account');
   const [isSaving, setIsSaving] = useState(false);
 
   useEffect(() => {
-    api.getSettings().then(setSettings).catch(console.error);
+    api.getSettings().then((value) => {
+      setSettings(value);
+      setLoadError(null);
+    }).catch(setLoadError);
   }, []);
 
+  if (!settings && loadError) return <ErrorState error={loadError} title="Could not load settings" onRetry={() => {
+    setLoadError(null);
+    return api.getSettings().then(setSettings).catch(setLoadError);
+  }} />;
   if (!settings) return <LoadingState title="Loading workspace settings" rows={7} />;
 
   function update<K extends keyof WorkspaceSettings>(key: K, value: WorkspaceSettings[K]) {

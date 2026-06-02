@@ -4,6 +4,7 @@ import { Link } from 'react-router-dom';
 import { api } from '../api.js';
 import { CrawlActionButtons } from '../components/CrawlActionButtons.jsx';
 import { CrawlStatusBadge } from '../components/CrawlStatusBadge.jsx';
+import { ErrorState } from '../components/ErrorState.jsx';
 import { LoadingState } from '../components/LoadingState.jsx';
 import { useLiveRefresh } from '../hooks/useLiveEvents.js';
 import { useMediaQuery } from '../hooks/useMediaQuery.js';
@@ -20,10 +21,14 @@ export function Crawls() {
 function DesktopCrawls() {
   const [jobs, setJobs] = useState<CrawlJob[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState<unknown>(null);
 
   async function load() {
     try {
+      setLoadError(null);
       setJobs(await api.listCrawls());
+    } catch (error) {
+      setLoadError(error);
     } finally {
       setIsLoading(false);
     }
@@ -57,7 +62,8 @@ function DesktopCrawls() {
           <p className="mt-2 text-[16px] text-[#636360]">Progress, discoveries, and controls for every active intelligence job.</p>
         </div>
       </header>
-      {isLoading ? <LoadingState title="Loading crawl jobs" /> : (
+      {!isLoading && loadError ? <ErrorState error={loadError} title="Could not load crawls" onRetry={() => { setIsLoading(true); return load(); }} /> : null}
+      {isLoading ? <LoadingState title="Loading crawl jobs" /> : !loadError ? (
         <section className="desktop-card overflow-hidden rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-base)] shadow-panel">
           <div className="grid grid-cols-[minmax(260px,1.4fr)_120px_160px_110px_170px_220px] gap-4 border-b border-[#eaeae6] px-5 py-4 text-xs font-extrabold uppercase tracking-[0.12em] text-[#636360] max-[1100px]:hidden">
             <span>Target</span>
@@ -102,7 +108,7 @@ function DesktopCrawls() {
             ))}
           </div>
         </section>
-      )}
+      ) : null}
     </div>
   );
 }

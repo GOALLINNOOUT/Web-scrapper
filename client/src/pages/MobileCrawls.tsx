@@ -2,6 +2,7 @@ import { Activity, Eye, Mail, Share2 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../api.js';
+import { ErrorState } from '../components/ErrorState.jsx';
 import { MobileStatusPill } from '../components/MobileStatusPill.jsx';
 import { useLiveRefresh } from '../hooks/useLiveEvents.js';
 import { formatRelativeTime, progressFor, toDomain } from '../lib/format.js';
@@ -12,10 +13,14 @@ export function MobileCrawls() {
   const navigate = useNavigate();
   const [jobs, setJobs] = useState<CrawlJob[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState<unknown>(null);
 
   async function load() {
     try {
+      setLoadError(null);
       setJobs(await api.listCrawls());
+    } catch (error) {
+      setLoadError(error);
     } finally {
       setIsLoading(false);
     }
@@ -44,9 +49,10 @@ export function MobileCrawls() {
     <div className="mobile-page-enter mx-auto w-full max-w-[400px] px-4 pb-[112px] pt-2">
       <h2 className="mobile-section-label !px-0">Operations</h2>
       {isLoading ? <div className="grid gap-2">{[0, 1, 2].map((item) => <span className="mobile-skeleton h-28 rounded-xl" key={item} />)}</div> : null}
-      {!isLoading && jobs.length === 0 ? <div className="rounded-xl bg-[var(--bg-base)] p-8 text-center"><Activity className="mx-auto text-[var(--accent)]" size={34} /><p className="mt-3 text-sm font-semibold">No crawl operations yet</p></div> : null}
+      {!isLoading && loadError ? <ErrorState error={loadError} title="Could not load crawls" onRetry={() => { setIsLoading(true); return load(); }} /> : null}
+      {!isLoading && !loadError && jobs.length === 0 ? <div className="rounded-xl bg-[var(--bg-base)] p-8 text-center"><Activity className="mx-auto text-[var(--accent)]" size={34} /><p className="mt-3 text-sm font-semibold">No crawl operations yet</p></div> : null}
       <div className="grid gap-2">
-        {jobs.map((job) => {
+        {!loadError && jobs.map((job) => {
           const progress = progressFor(job);
           return (
             <button className="mobile-crawl-card mobile-tap w-full text-left" key={job._id} type="button" onClick={() => navigate(`/crawls/${job._id}`)}>

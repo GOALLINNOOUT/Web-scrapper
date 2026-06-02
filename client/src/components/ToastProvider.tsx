@@ -1,4 +1,4 @@
-import { CheckCircle2, Info, X, XCircle } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, Info, X, XCircle } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { TOAST_EVENT, type ToastPayload, type ToastTone } from '../toast.js';
@@ -11,12 +11,16 @@ interface ToastItem extends ToastPayload {
 const icons = {
   success: CheckCircle2,
   error: XCircle,
+  warning: AlertTriangle,
+  info: Info,
   message: Info
 };
 
 const labels = {
   success: 'Success',
   error: 'Attention',
+  warning: 'Check',
+  info: 'Info',
   message: 'Update'
 };
 
@@ -32,6 +36,18 @@ const toneStyles = {
     icon: 'bg-red-50 text-red-700 ring-red-100',
     label: 'text-red-700',
     bar: 'bg-red-500'
+  },
+  warning: {
+    shell: 'border-amber-200/70',
+    icon: 'bg-amber-50 text-amber-700 ring-amber-100',
+    label: 'text-amber-700',
+    bar: 'bg-amber-500'
+  },
+  info: {
+    shell: 'border-[#dbe7ff]',
+    icon: 'bg-[#ebf2ff] text-brand-700 ring-[#dbe7ff]',
+    label: 'text-brand-700',
+    bar: 'bg-brand-600'
   },
   message: {
     shell: 'border-[#dbe7ff]',

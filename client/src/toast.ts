@@ -1,4 +1,4 @@
-export type ToastTone = 'success' | 'error' | 'message';
+export type ToastTone = 'success' | 'error' | 'warning' | 'info' | 'message';
 
 export interface ToastPayload {
   title: string;

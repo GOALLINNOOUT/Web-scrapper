@@ -1118,6 +1118,18 @@ a:active {
     box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 16%, transparent);
   }
 
+  .desktop-page .desktop-launcher:focus-within {
+    border-color: var(--accent);
+    box-shadow: 0 14px 38px rgba(17, 17, 16, 0.06), 0 0 0 3px color-mix(in srgb, var(--accent) 14%, transparent);
+  }
+
+  .desktop-page .desktop-launcher input,
+  .desktop-page .desktop-launcher input:focus {
+    background: transparent;
+    border-color: transparent;
+    box-shadow: none;
+  }
+
   .desktop-page button:active,
   .desktop-sidebar button:active,
   .desktop-command-header button:active,

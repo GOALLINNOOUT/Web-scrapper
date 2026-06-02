@@ -10,6 +10,7 @@ import { Domains } from './pages/Domains.jsx';
 import { Monitoring } from './pages/Monitoring.jsx';
 import { Settings } from './pages/Settings.jsx';
 import { ToastProvider } from './components/ToastProvider.jsx';
+import { NetworkStatusBanner } from './components/NetworkStatusBanner.jsx';
 import { RouteSeo } from './components/RouteSeo.jsx';
 import { useLiveEvents } from './hooks/useLiveEvents.js';
 import { applyTheme, getStoredTheme } from './theme.js';
@@ -30,6 +31,7 @@ function RootApp() {
     <BrowserRouter>
       <RouteSeo />
       <ToastProvider />
+      <NetworkStatusBanner />
       <Routes>
         <Route element={<AppShell />}>
           <Route index element={<Overview />} />

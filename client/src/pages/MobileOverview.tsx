@@ -3,6 +3,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../api.js';
 import { MobileStatusPill } from '../components/MobileStatusPill.jsx';
+import { ErrorState } from '../components/ErrorState.jsx';
 import { useLiveRefresh } from '../hooks/useLiveEvents.js';
 import { mergeLivePage, parseLiveCrawlJob, parseLiveCrawlJobSnapshot, parseLiveCrawlPage, patchJobList, upsertJobList } from '../lib/liveCrawl.js';
 import type { CrawlJob, CrawlPage, MonitoringSummary } from '../types.js';
@@ -16,18 +17,25 @@ export function MobileOverview() {
   const [pages, setPages] = useState<CrawlPage[]>([]);
   const [monitoring, setMonitoring] = useState<MonitoringSummary | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState<unknown>(null);
   const [activeMetric, setActiveMetric] = useState(0);
 
   async function load() {
-    const [crawlJobs, data, monitoringSummary] = await Promise.all([
-      api.listCrawls(),
-      api.getData({ limit: 100 }),
-      api.getMonitoring().catch(() => null)
-    ]);
-    setJobs(crawlJobs);
-    setPages(data.items);
-    setMonitoring(monitoringSummary);
-    setIsLoading(false);
+    setLoadError(null);
+    try {
+      const [crawlJobs, data, monitoringSummary] = await Promise.all([
+        api.listCrawls(),
+        api.getData({ limit: 100 }),
+        api.getMonitoring().catch(() => null)
+      ]);
+      setJobs(crawlJobs);
+      setPages(data.items);
+      setMonitoring(monitoringSummary);
+    } catch (error) {
+      setLoadError(error);
+    } finally {
+      setIsLoading(false);
+    }
   }
 
   useEffect(() => {
@@ -46,7 +54,15 @@ export function MobileOverview() {
   useLiveRefresh((event) => {
     const payload = parseLiveCrawlPage(event);
     if (payload) {
-      setJobs((current) => patchJobList(current, event.crawlId, payload.job));
+      setJobs((current) => {
+        const patched = patchJobList(current, event.crawlId, payload.job);
+        if (event.crawlId && !patched.some((job) => job._id === event.crawlId)) {
+          void api.getCrawl(event.crawlId)
+            .then((job) => setJobs((latest) => upsertJobList(latest, job)))
+            .catch(() => undefined);
+        }
+        return patched;
+      });
       setPages((current) => mergeLivePage(current, payload.page, 100));
       setIsLoading(false);
       return;
@@ -60,10 +76,11 @@ export function MobileOverview() {
     }
   }, []);
 
-  const activeCrawls = useMemo(() => jobs.filter((job) => activeStatuses.includes(job.status as typeof activeStatuses[number])).slice(0, 8), [jobs]);
+  const allKnownJobs = useMemo(() => mergeJobs(jobs, monitoring?.activeCrawls || []), [jobs, monitoring?.activeCrawls]);
+  const activeCrawls = useMemo(() => allKnownJobs.filter((job) => activeStatuses.includes(job.status as typeof activeStatuses[number])).slice(0, 8), [allKnownJobs]);
   const metrics = useMemo(() => {
-    const pagesCrawled = jobs.reduce((total, job) => total + (job.pagesCrawled || 0), 0);
-    const emailsFound = jobs.reduce((total, job) => total + (job.emailsFound || 0), 0);
+    const pagesCrawled = allKnownJobs.reduce((total, job) => total + (job.pagesCrawled || 0), 0);
+    const emailsFound = allKnownJobs.reduce((total, job) => total + (job.emailsFound || 0), 0);
     const monitoredDomains = monitoring?.health.monitoredDomains || monitoring?.profiles.length || monitoring?.domains.length || 0;
     const changesDetected = monitoring?.counts.changesToday || monitoring?.changeFeed.length || 0;
     const pageTrend = trendFromWindows(
@@ -93,7 +110,7 @@ export function MobileOverview() {
       { label: 'Domains Monitored', value: monitoredDomains, ...domainTrend },
       { label: 'Changes Detected', value: changesDetected, ...changeTrend }
     ];
-  }, [jobs, monitoring, pages]);
+  }, [allKnownJobs, monitoring, pages]);
 
   function handleMetricScroll() {
     const row = metricRowRef.current;
@@ -107,6 +124,9 @@ export function MobileOverview() {
 
   return (
     <div className="mobile-page-enter pb-[112px]">
+      {!isLoading && loadError ? <div className="px-5 pt-4"><ErrorState error={loadError} title="Could not load Overview" onRetry={() => { setIsLoading(true); return load(); }} /></div> : null}
+      {!loadError ? (
+      <>
       <section aria-labelledby="metrics-heading">
         <h2 id="metrics-heading" className="mobile-section-label">Metrics</h2>
         <div className="no-scrollbar flex snap-x gap-3 overflow-x-auto px-5" ref={metricRowRef} onScroll={handleMetricScroll}>
@@ -130,7 +150,7 @@ export function MobileOverview() {
             </div>
           ) : null}
 
-          {!isLoading && activeCrawls.length === 0 ? <EmptyState jobs={jobs} onBrowse={() => navigate('/data')} /> : null}
+          {!isLoading && activeCrawls.length === 0 ? <EmptyState jobs={allKnownJobs} onBrowse={() => navigate('/data')} /> : null}
 
           {!isLoading ? activeCrawls.map((job, index) => (
             <button
@@ -166,6 +186,8 @@ export function MobileOverview() {
           )) : null}
         </div>
       </section>
+      </>
+      ) : null}
     </div>
   );
 }
@@ -218,6 +240,15 @@ function trendFromWindows<T>(items: T[], getDate: (item: T) => string | undefine
   const percent = Math.round((delta / Math.max(1, previous)) * 100);
   if (percent === 0) return { trend: '0%', tone: 'neutral' as const };
   return { trend: `${percent > 0 ? '+' : ''}${percent}%`, tone: percent > 0 ? 'positive' as const : 'negative' as const };
+}
+
+function mergeJobs(primary: CrawlJob[], secondary: CrawlJob[]) {
+  const byId = new Map<string, CrawlJob>();
+  for (const job of [...secondary, ...primary]) {
+    const existing = byId.get(job._id);
+    byId.set(job._id, existing ? { ...existing, ...job } : job);
+  }
+  return [...byId.values()].sort((left, right) => new Date(right.createdAt).getTime() - new Date(left.createdAt).getTime());
 }
 
 function CountUp({ value, className }: { value: number; className: string }) {

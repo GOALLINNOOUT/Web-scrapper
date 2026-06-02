@@ -3,6 +3,7 @@ import { Link as LinkIcon, Mail, Share2, Table2 } from 'lucide-react';
 import { api } from '../api.js';
 import { CopyButton } from '../components/CopyButton.jsx';
 import { DataTable } from '../components/DataTable.jsx';
+import { ErrorState } from '../components/ErrorState.jsx';
 import { FilterBar } from '../components/FilterBar.jsx';
 import { LoadMoreButton } from '../components/LoadMoreButton.jsx';
 import { LoadingState } from '../components/LoadingState.jsx';
@@ -39,12 +40,14 @@ function DesktopDataExplorer() {
   const [visibleCount, setVisibleCount] = useState(DISPLAY_LIMIT);
   const [pages, setPages] = useState<CrawlPage[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState<unknown>(null);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [nextCursor, setNextCursor] = useState<string | null>(null);
   const debouncedFilters = useDebouncedValue(filters, 300);
 
   useEffect(() => {
     setIsLoading(true);
+    setLoadError(null);
     setVisibleCount(DISPLAY_LIMIT);
     api.getData({
       q: debouncedFilters.q,
@@ -58,7 +61,7 @@ function DesktopDataExplorer() {
     }).then((data) => {
       setPages(data.items);
       setNextCursor(data.nextCursor);
-    }).catch(console.error).finally(() => setIsLoading(false));
+    }).catch(setLoadError).finally(() => setIsLoading(false));
   }, [debouncedFilters]);
 
   useEffect(() => {
@@ -124,7 +127,9 @@ function DesktopDataExplorer() {
         })}
       </div>
 
-      {isLoading ? <LoadingState title="Loading archive data" rows={5} /> : renderTable(mode, uniquePages, rows, visibleCount, hasActiveFilter(filters))}
+      {isLoading ? <LoadingState title="Loading archive data" rows={5} /> : loadError ? <ErrorState error={loadError} title="Could not load archive data" onRetry={() => {
+        setFilters((current) => ({ ...current }));
+      }} /> : renderTable(mode, uniquePages, rows, visibleCount, hasActiveFilter(filters))}
       {!isLoading ? (
         <div className="flex flex-wrap justify-center gap-3">
           {modeHasMore(mode, uniquePages, rows, visibleCount) ? (

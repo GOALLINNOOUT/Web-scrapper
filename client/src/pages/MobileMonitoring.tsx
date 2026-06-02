@@ -1,6 +1,7 @@
 import { Bell, Globe2, LoaderCircle, Mail, Plus, Radar, Sparkles } from 'lucide-react';
 import { FormEvent, useEffect, useMemo, useState } from 'react';
 import { api } from '../api.js';
+import { ErrorState } from '../components/ErrorState.jsx';
 import { formatRelativeTime } from '../lib/format.js';
 import { normalizeMonitorDomain } from '../lib/monitorDomain.js';
 import { showToast } from '../toast.js';
@@ -10,13 +11,19 @@ export function MobileMonitoring() {
   const [summary, setSummary] = useState<MonitoringSummary | null>(null);
   const [domain, setDomain] = useState('');
   const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState<unknown>(null);
   const [isAdding, setIsAdding] = useState(false);
   const [monitorError, setMonitorError] = useState('');
   const normalizedDomain = normalizeMonitorDomain(domain);
   const isValidDomain = Boolean(normalizedDomain);
 
   async function load() {
-    setSummary(await api.getMonitoring());
+    setLoadError(null);
+    try {
+      setSummary(await api.getMonitoring());
+    } catch (error) {
+      setLoadError(error);
+    }
   }
 
   useEffect(() => {
@@ -59,7 +66,9 @@ export function MobileMonitoring() {
       {domain.trim() && !isValidDomain ? <p className="mt-2 px-1 text-xs font-medium text-[var(--danger)]">Enter a domain like example.com.</p> : null}
       {monitorError ? <p className="mt-2 px-1 text-xs font-medium text-[var(--danger)]">{monitorError}</p> : null}
 
-      {isLoading || !summary ? <div className="mt-5 grid gap-2">{[0, 1, 2].map((item) => <span className="mobile-skeleton h-24 rounded-xl" key={item} />)}</div> : (
+      {isLoading ? <div className="mt-5 grid gap-2">{[0, 1, 2].map((item) => <span className="mobile-skeleton h-24 rounded-xl" key={item} />)}</div> : null}
+      {!isLoading && (loadError || !summary) ? <div className="mt-5"><ErrorState error={loadError || new Error('Monitoring data was unavailable.')} title="Could not load monitoring" onRetry={() => { setIsLoading(true); return load().finally(() => setIsLoading(false)); }} /></div> : null}
+      {!isLoading && !loadError && summary ? (
         <>
           <div className="mt-5 grid grid-cols-2 gap-2">
             <MiniMetric icon={Sparkles} label="Changes" value={summary.counts.changesToday} />
@@ -86,7 +95,7 @@ export function MobileMonitoring() {
             {summary.profiles.map((profile) => <ProfileChip profile={profile} key={profile._id} />)}
           </div>
         </>
-      )}
+      ) : null}
     </div>
   );
 }
