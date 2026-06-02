@@ -972,3 +972,161 @@ a:active {
     transition-duration: 0ms !important;
   }
 }
+
+@media (min-width: 900px) {
+  .desktop-shell {
+    background:
+      linear-gradient(180deg, color-mix(in srgb, var(--bg-canvas) 88%, var(--bg-raised)), var(--bg-canvas) 26rem);
+  }
+
+  .desktop-main {
+    scroll-padding-top: 96px;
+  }
+
+  .desktop-sidebar,
+  .desktop-card,
+  .desktop-command-bar,
+  .desktop-search-popover,
+  .desktop-hero {
+    box-shadow: 0 1px 0 rgba(255,255,255,0.62) inset, 0 18px 44px rgba(17,17,16,0.055);
+  }
+
+  :root[data-theme="dark"] .desktop-sidebar,
+  :root[data-theme="dark"] .desktop-card,
+  :root[data-theme="dark"] .desktop-command-bar,
+  :root[data-theme="dark"] .desktop-search-popover,
+  :root[data-theme="dark"] .desktop-hero {
+    box-shadow: 0 1px 0 rgba(255,255,255,0.04) inset, 0 18px 44px rgba(0,0,0,0.22);
+  }
+
+  .desktop-command-header {
+    padding-left: clamp(18px, 2.2vw, 30px);
+    padding-right: clamp(18px, 2.2vw, 30px);
+  }
+
+  .desktop-page {
+    animation: page-enter 300ms var(--expo) both;
+    margin-inline: auto;
+    max-width: 1440px;
+    width: 100%;
+  }
+
+  .desktop-page > header:not(.desktop-hero) {
+    background: var(--bg-base);
+    border: 1px solid var(--border-subtle);
+    border-radius: 8px;
+    box-shadow: 0 1px 0 rgba(255,255,255,0.62) inset, 0 14px 34px rgba(17,17,16,0.045);
+    padding: 20px;
+  }
+
+  :root[data-theme="dark"] .desktop-page > header:not(.desktop-hero) {
+    box-shadow: 0 1px 0 rgba(255,255,255,0.04) inset, 0 14px 34px rgba(0,0,0,0.18);
+  }
+
+  .desktop-page h1,
+  .desktop-page h2,
+  .desktop-page h3 {
+    color: var(--text-primary);
+    letter-spacing: 0;
+  }
+
+  .desktop-page h1 {
+    font-weight: 650;
+    letter-spacing: -0.03em;
+  }
+
+  .desktop-page p,
+  .desktop-page small,
+  .desktop-page .text-\[\#636360\],
+  .desktop-page .text-muted {
+    color: var(--text-secondary);
+  }
+
+  .desktop-card {
+    transition: transform 200ms var(--quart), border-color 200ms var(--quart), box-shadow 200ms var(--quart), background-color 200ms var(--quart);
+  }
+
+  .desktop-card:hover {
+    border-color: color-mix(in srgb, var(--accent) 20%, var(--border-subtle));
+    box-shadow: 0 1px 0 rgba(255,255,255,0.62) inset, 0 20px 52px rgba(17,17,16,0.075);
+  }
+
+  :root[data-theme="dark"] .desktop-card:hover {
+    box-shadow: 0 1px 0 rgba(255,255,255,0.04) inset, 0 22px 58px rgba(0,0,0,0.28);
+  }
+
+  .desktop-sidebar {
+    backdrop-filter: blur(16px);
+  }
+
+  .desktop-sidebar-link {
+    position: relative;
+  }
+
+  .desktop-sidebar-link-active {
+    background: linear-gradient(90deg, var(--accent-light), color-mix(in srgb, var(--accent-light) 52%, transparent));
+  }
+
+  .desktop-primary-action,
+  .desktop-launcher button[type="submit"] {
+    box-shadow: 0 12px 28px color-mix(in srgb, var(--accent) 22%, transparent);
+  }
+
+  .desktop-status-card {
+    background:
+      radial-gradient(circle at 88% 0%, color-mix(in srgb, var(--accent-light) 78%, transparent), transparent 42%),
+      var(--bg-raised);
+  }
+
+  .desktop-page table thead {
+    background: var(--bg-base);
+    position: sticky;
+    top: 0;
+    z-index: 1;
+  }
+
+  .desktop-page table th {
+    color: var(--text-tertiary);
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.07em;
+    text-transform: uppercase;
+  }
+
+  .desktop-page table td {
+    color: var(--text-primary);
+    vertical-align: middle;
+  }
+
+  .desktop-page table tr:hover {
+    background: var(--bg-raised);
+  }
+
+  .desktop-page input,
+  .desktop-page select,
+  .desktop-page textarea {
+    background: var(--bg-raised);
+    border-color: var(--border-subtle);
+    color: var(--text-primary);
+  }
+
+  .desktop-page input:focus,
+  .desktop-page select:focus,
+  .desktop-page textarea:focus {
+    background: var(--bg-base);
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 16%, transparent);
+  }
+
+  .desktop-page button:active,
+  .desktop-sidebar button:active,
+  .desktop-command-header button:active,
+  .desktop-page a:active {
+    transform: scale(0.98);
+    transition-duration: 80ms;
+  }
+
+  .desktop-page .rounded-\[26px\] {
+    border-radius: 8px;
+  }
+}

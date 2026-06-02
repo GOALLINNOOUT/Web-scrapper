@@ -9,7 +9,7 @@ export function CrawlDetailPanel({ job }: CrawlDetailPanelProps) {
   if (!job) return null;
 
   return (
-    <section className="grid gap-5 rounded-lg border border-[#eaeae6] bg-white p-6 shadow-panel">
+    <section className="desktop-card grid gap-5 rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-base)] p-6 shadow-panel">
       <div>
         <span className="text-xs font-extrabold uppercase tracking-[0.14em] text-brand-600">Seed</span>
         <h2 className="mt-2 text-2xl font-extrabold [overflow-wrap:anywhere]">{job.seedUrl}</h2>

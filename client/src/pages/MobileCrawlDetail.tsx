@@ -3,7 +3,9 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useLocation, useParams } from 'react-router-dom';
 import { api } from '../api.js';
+import { CrawlActionButtons } from '../components/CrawlActionButtons.jsx';
 import { CopyButton } from '../components/CopyButton.jsx';
+import { RetryCrawlButton } from '../components/RetryCrawlButton.jsx';
 import { useLiveRefresh } from '../hooks/useLiveEvents.js';
 import { formatRelativeTime, progressFor, toDomain } from '../lib/format.js';
 import { applyLiveJobPatch, mergeLivePage, parseLiveCrawlJob, parseLiveCrawlPage } from '../lib/liveCrawl.js';
@@ -113,13 +115,28 @@ export function MobileCrawlDetail() {
   const progress = progressFor(job);
 
   return (
-    <div className="mobile-page-enter px-4 pb-6">
+    <div className="mobile-page-enter px-4 pb-[112px] pt-2">
       <section className="rounded-2xl border border-[var(--border-subtle)] bg-[var(--bg-base)] p-4">
         <span className="text-[11px] font-semibold uppercase tracking-[0.07em] text-[var(--text-tertiary)]">Crawl Detail</span>
         <h2 className="mt-2 break-words text-xl font-semibold">{toDomain(job.seedUrl)}</h2>
         <p className="mt-1 break-words font-mono text-[11px] text-[var(--text-secondary)]">{job.seedUrl}</p>
         <div className="mt-4 h-2 overflow-hidden rounded-full bg-[var(--bg-sunken)]"><span className={`mobile-progress-fill block h-full rounded-full ${job.status === 'completed' ? 'bg-[var(--success)]' : 'bg-[var(--accent)]'} ${job.status === 'running' ? 'mobile-progress-live' : ''}`} style={{ width: `${progress}%` }} /></div>
         <div className="mt-2 flex justify-between font-mono text-[11px] text-[var(--text-secondary)]"><span>{job.pagesCrawled} of {job.config.maxPages}</span><span>{progress}%</span></div>
+        <div className="mt-4 flex flex-wrap gap-2">
+          {['queued', 'running', 'paused'].includes(job.status) ? (
+            <CrawlActionButtons job={job} compact onChange={async () => {
+              if (!id) return;
+              setJob(await api.getCrawl(id));
+            }} />
+          ) : (
+            <RetryCrawlButton job={job} compact onRetry={(nextJob) => {
+              setJob(nextJob);
+              setPages([]);
+              setSelectedPage(null);
+              setNextCursor(null);
+            }} />
+          )}
+        </div>
       </section>
 
       <div className="mt-4 grid grid-cols-2 gap-2">
@@ -302,7 +319,7 @@ function MetadataSheet({ page, onClose }: { page: CrawlPage | null; onClose: () 
   const rows = buildMetadataRows(page);
 
   return createPortal(
-    <div className="fixed inset-0 z-[300]" role="dialog" aria-modal="true" aria-labelledby="page-metadata-title">
+    <div className="fixed inset-0 z-[1000]" role="dialog" aria-modal="true" aria-labelledby="page-metadata-title">
       <button className="mobile-sheet-overlay absolute inset-0 w-full" type="button" aria-label="Close metadata" onClick={onClose} />
       <section className="mobile-sheet-panel absolute bottom-0 left-0 right-0 h-[78vh]">
         <div className="flex items-center justify-between border-b border-[var(--border-subtle)] px-5 py-3">

@@ -1,5 +1,6 @@
 import { Check, LoaderCircle, X } from 'lucide-react';
 import { FormEvent, useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { api } from '../api.js';
 import { normalizeSeedUrl } from '../lib/seedUrl.js';
 import { showToast } from '../toast.js';
@@ -125,8 +126,8 @@ export function MobileNewCrawlSheet({ open, onClose, onCreated }: MobileNewCrawl
     }
   }
 
-  return (
-    <div className="fixed inset-0 z-[300]" role="dialog" aria-modal="true" aria-labelledby="new-crawl-title">
+  return createPortal(
+    <div className="fixed inset-0 z-[1000]" role="dialog" aria-modal="true" aria-labelledby="new-crawl-title">
       <button className="mobile-sheet-overlay absolute inset-0 w-full" type="button" aria-label="Close new crawl" onClick={onClose} />
       <form className="mobile-sheet-panel absolute bottom-0 left-0 right-0" onSubmit={startCrawl} ref={panelRef}>
         <div
@@ -215,7 +216,8 @@ export function MobileNewCrawlSheet({ open, onClose, onCreated }: MobileNewCrawl
           </button>
         </div>
       </form>
-    </div>
+    </div>,
+    document.body
   );
 }
 

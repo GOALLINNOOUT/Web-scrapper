@@ -14,7 +14,7 @@ interface DataTableProps<T extends { _id?: string; id?: string; url?: string }> 
 
 export function DataTable<T extends { _id?: string; id?: string; url?: string }>({ columns, rows, empty = 'No data yet.' }: DataTableProps<T>) {
   return (
-    <div className="overflow-auto rounded-lg border border-[#eaeae6] bg-white shadow-panel">
+    <div className="desktop-card overflow-auto rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-base)] shadow-panel">
       <table className="w-full min-w-[720px] border-collapse">
         <thead>
           <tr>

@@ -1,5 +1,6 @@
 import { ChevronRight, Globe2, LoaderCircle, Mail, Network, Play, RefreshCw, Search, Share2, ShieldCheck, X } from 'lucide-react';
 import { FormEvent, useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../api.js';
 import { normalizeSeedUrl } from '../lib/seedUrl.js';
@@ -79,7 +80,7 @@ export function MobileDomains() {
   }
 
   return (
-    <div className="mobile-page-enter px-4 pb-6">
+    <div className="mobile-page-enter px-4 pb-[112px] pt-2">
       <form className="grid grid-cols-[minmax(0,1fr)_44px] gap-2" onSubmit={lookup}>
         <label className="grid h-11 grid-cols-[18px_minmax(0,1fr)] items-center gap-2 rounded-xl border border-[var(--border-default)] bg-[var(--bg-base)] px-3">
           <Search size={17} className="text-[var(--text-secondary)]" />
@@ -128,8 +129,8 @@ function DomainDetailSheet({ domain, isEnriching, isStarting, onClose, onEnrich,
   if (!domain) return null;
   const hasCrawl = Boolean(domain.lastCrawledAt && domain.totalPages > 0);
 
-  return (
-    <div className="fixed inset-0 z-[300]" role="dialog" aria-modal="true" aria-labelledby="domain-detail-title">
+  return createPortal(
+    <div className="fixed inset-0 z-[1000]" role="dialog" aria-modal="true" aria-labelledby="domain-detail-title">
       <button className="mobile-sheet-overlay absolute inset-0 w-full" type="button" aria-label="Close domain detail" onClick={onClose} />
       <section className="mobile-sheet-panel absolute bottom-0 left-0 right-0 h-[86vh]">
         <div className="flex items-center justify-between border-b border-[var(--border-subtle)] px-5 py-3">
@@ -190,7 +191,8 @@ function DomainDetailSheet({ domain, isEnriching, isStarting, onClose, onEnrich,
           </section>
         </div>
       </section>
-    </div>
+    </div>,
+    document.body
   );
 }
 

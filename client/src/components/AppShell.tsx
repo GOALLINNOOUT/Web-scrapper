@@ -103,15 +103,15 @@ function DesktopAppShell() {
   const showSearchPanel = isSearchFocused && (query.trim() || results.length > 0);
 
   return (
-    <div className="h-screen overflow-hidden bg-[#fafaf8] text-[#111110]">
-      <div className={`grid h-screen overflow-hidden bg-[#fafaf8] transition-[grid-template-columns] duration-300 ease-[var(--ease-out-expo)] max-[900px]:grid-cols-1 ${sidebarCollapsed ? 'grid-cols-[88px_minmax(0,1fr)]' : 'grid-cols-[260px_minmax(0,1fr)]'}`}>
+    <div className="desktop-shell h-screen overflow-hidden bg-[var(--bg-canvas)] text-[var(--text-primary)]">
+      <div className={`grid h-screen overflow-hidden bg-[var(--bg-canvas)] transition-[grid-template-columns] duration-300 ease-[var(--ease-out-expo)] max-[900px]:grid-cols-1 ${sidebarCollapsed ? 'grid-cols-[88px_minmax(0,1fr)]' : 'grid-cols-[260px_minmax(0,1fr)]'}`}>
         <Sidebar collapsed={sidebarCollapsed} onToggle={() => setSidebarCollapsed((value) => !value)} />
-        <main className="h-screen min-w-0 overflow-x-hidden overflow-y-auto bg-[#fafaf8] px-6 pb-8 pt-0 max-[900px]:h-auto max-[900px]:min-h-screen max-[900px]:px-3.5 max-[900px]:pb-3.5 max-[900px]:pt-0">
-          <header className="sticky top-0 z-30 mb-6 grid min-h-20 grid-cols-[minmax(280px,610px)_auto] items-center justify-between gap-4 border-b border-[#eaeae6] bg-[#fafaf8]/90 p-4 backdrop-blur-xl max-[760px]:grid-cols-1">
-            <div className="relative flex h-[52px] w-full items-center gap-3 rounded-lg border border-[#eaeae6] bg-white px-4 shadow-sm transition focus-within:border-[#c8c8c2] focus-within:bg-white focus-within:shadow-[0_0_0_3px_rgba(10,110,255,0.20)]">
-              <Search className="text-[#636360]" size={18} />
+        <main className="desktop-main h-screen min-w-0 overflow-x-hidden overflow-y-auto bg-[var(--bg-canvas)] px-6 pb-8 pt-0 max-[900px]:h-auto max-[900px]:min-h-screen max-[900px]:px-3.5 max-[900px]:pb-3.5 max-[900px]:pt-0">
+          <header className="desktop-command-header sticky top-0 z-30 mb-6 grid min-h-20 grid-cols-[minmax(280px,680px)_auto] items-center justify-between gap-4 border-b border-[var(--border-subtle)] bg-[color-mix(in_srgb,var(--bg-canvas)_88%,transparent)] p-4 backdrop-blur-xl max-[760px]:grid-cols-1">
+            <div className="desktop-command-bar relative flex h-[52px] w-full items-center gap-3 rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-base)] px-4 shadow-sm transition focus-within:border-[var(--accent)] focus-within:bg-[var(--bg-base)] focus-within:shadow-[0_0_0_3px_rgba(10,110,255,0.16)]">
+              <Search className="text-[var(--text-secondary)]" size={18} />
               <input
-                className="min-w-0 flex-1 border-0 bg-transparent text-[15px] text-[#111110] outline-none placeholder:text-[#9b9b97]"
+                className="min-w-0 flex-1 border-0 bg-transparent text-[15px] font-medium text-[var(--text-primary)] outline-none placeholder:text-[var(--text-tertiary)]"
                 ref={searchRef}
                 value={query}
                 onBlur={() => window.setTimeout(() => setIsSearchFocused(false), 140)}
@@ -120,7 +120,7 @@ function DesktopAppShell() {
                 placeholder="Search workspace"
               />
               {query ? (
-                <button className="grid h-8 w-8 place-items-center rounded-md border border-[#eaeae6] bg-[#f5f5f2] text-[#636360] shadow-sm transition hover:text-[#111110]" type="button" onClick={() => {
+                <button className="grid h-8 w-8 place-items-center rounded-md border border-[var(--border-subtle)] bg-[var(--bg-raised)] text-[var(--text-secondary)] shadow-sm transition hover:text-[var(--text-primary)]" type="button" onClick={() => {
                   setQuery('');
                   setResults([]);
                   searchRef.current?.focus();
@@ -128,39 +128,39 @@ function DesktopAppShell() {
                   <X size={15} />
                 </button>
               ) : null}
-              <kbd className="inline-flex items-center gap-1 rounded-md border border-[#eaeae6] bg-[#f5f5f2] px-2 py-1 text-xs font-semibold text-[#636360]"><Command size={13} /> K</kbd>
+              <kbd className="inline-flex items-center gap-1 rounded-md border border-[var(--border-subtle)] bg-[var(--bg-raised)] px-2 py-1 text-xs font-semibold text-[var(--text-secondary)]"><Command size={13} /> K</kbd>
               {showSearchPanel ? (
-                <div className="absolute left-0 right-0 top-[calc(100%+10px)] z-30 max-h-[min(68vh,620px)] overflow-hidden rounded-lg border border-[#eaeae6] bg-white p-2 shadow-float">
+                <div className="desktop-search-popover absolute left-0 right-0 top-[calc(100%+10px)] z-30 max-h-[min(68vh,620px)] overflow-hidden rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-base)] p-2 shadow-float">
                   <div className="flex items-center justify-between gap-3 px-3 py-2 text-sm font-semibold">
                     <span>Workspace search</span>
-                    <small className="text-xs font-medium text-[#636360]">{query.trim() ? `${results.length}${nextSearchCursor ? '+' : ''} matches` : 'Type to search'}</small>
+                    <small className="text-xs font-medium text-[var(--text-secondary)]">{query.trim() ? `${results.length}${nextSearchCursor ? '+' : ''} matches` : 'Type to search'}</small>
                   </div>
                   <div className="max-h-[calc(min(68vh,620px)-58px)] overflow-y-auto pr-1">
                     {isSearching ? (
-                      <span className="flex items-center gap-2 rounded-md px-3 py-3 text-sm font-medium text-[#636360]"><LoaderCircle className="animate-spin" size={15} /> Searching workspace...</span>
+                      <span className="flex items-center gap-2 rounded-md px-3 py-3 text-sm font-medium text-[var(--text-secondary)]"><LoaderCircle className="animate-spin" size={15} /> Searching workspace...</span>
                     ) : null}
                     {!isSearching && results.length === 0 ? (
-                      <span className="flex items-center gap-2 rounded-md px-3 py-3 text-sm font-medium text-[#636360]"><FileSearch size={15} /> No matches in this workspace.</span>
+                      <span className="flex items-center gap-2 rounded-md px-3 py-3 text-sm font-medium text-[var(--text-secondary)]"><FileSearch size={15} /> No matches in this workspace.</span>
                     ) : null}
                     {results.map((result) => (
                       <button
-                        className="grid grid-cols-[34px_minmax(0,1fr)_auto] items-center gap-3 rounded-md px-3 py-3 transition hover:bg-[#f5f5f2]"
+                        className="grid grid-cols-[34px_minmax(0,1fr)_auto] items-center gap-3 rounded-md px-3 py-3 transition hover:bg-[var(--bg-raised)]"
                         key={result._id}
                         type="button"
                         onMouseDown={(event) => event.preventDefault()}
                         onClick={() => openSearchResult(result)}
                       >
-                        <span className="grid h-[34px] w-[34px] place-items-center rounded-md bg-[#ebf2ff] text-sm font-semibold text-brand-700">{(result.domain || 'W').slice(0, 1).toUpperCase()}</span>
+                        <span className="grid h-[34px] w-[34px] place-items-center rounded-md bg-[var(--accent-light)] text-sm font-semibold text-[var(--accent)]">{(result.domain || 'W').slice(0, 1).toUpperCase()}</span>
                         <span className="min-w-0">
                           <strong className="block truncate text-sm">{result.metadata?.title || result.url}</strong>
-                          <small className="block truncate font-mono text-xs text-[#636360]">{result.domain || result.url}</small>
+                          <small className="block truncate font-mono text-xs text-[var(--text-secondary)]">{result.domain || result.url}</small>
                         </span>
-                        <em className="rounded-md bg-[#f5f5f2] px-2 py-1 text-xs not-italic text-[#636360]">{result.emails.length} emails</em>
+                        <em className="rounded-md bg-[var(--bg-raised)] px-2 py-1 text-xs not-italic text-[var(--text-secondary)]">{result.emails.length} emails</em>
                       </button>
                     ))}
                     {nextSearchCursor ? (
                       <button
-                        className="mt-2 inline-flex min-h-10 w-full items-center justify-center gap-2 rounded-md bg-[#f5f5f2] px-4 text-sm font-semibold text-brand-800 transition hover:bg-[#ebf2ff] disabled:cursor-wait disabled:opacity-70"
+                        className="mt-2 inline-flex min-h-10 w-full items-center justify-center gap-2 rounded-md bg-[var(--bg-raised)] px-4 text-sm font-semibold text-[var(--accent)] transition hover:bg-[var(--accent-light)] disabled:cursor-wait disabled:opacity-70"
                         type="button"
                         onMouseDown={(event) => event.preventDefault()}
                         onClick={loadMoreSearchResults}
@@ -175,7 +175,7 @@ function DesktopAppShell() {
               ) : null}
             </div>
             <div className="flex items-center justify-end gap-2.5 max-[760px]:justify-between">
-              <Link className="inline-flex min-h-11 items-center gap-2 rounded-md bg-brand-600 px-4 text-sm font-semibold text-white shadow-sm transition hover:bg-brand-700" to="/"><Radar size={17} /> Start</Link>
+              <Link className="desktop-primary-action inline-flex min-h-11 items-center gap-2 rounded-md bg-[var(--accent)] px-4 text-sm font-semibold text-white shadow-sm transition hover:bg-[var(--accent-hover)]" to="/"><Radar size={17} /> Start</Link>
             </div>
           </header>
           <Outlet />

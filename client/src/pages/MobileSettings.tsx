@@ -37,7 +37,7 @@ export function MobileSettings() {
   const crawling = settings.crawling;
 
   return (
-    <div className="mobile-page-enter grid gap-5 px-4 pb-6">
+    <div className="mobile-page-enter grid gap-5 px-4 pb-[128px] pt-2">
       <section>
         <h2 className="mobile-section-label !px-0">Appearance</h2>
         <div className="grid grid-cols-3 gap-2">

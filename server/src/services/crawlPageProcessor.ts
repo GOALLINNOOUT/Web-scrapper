@@ -149,6 +149,7 @@ export async function processCrawlPage(data: CrawlPageJobData, queues?: QueueBun
       return { skipped: true, reason: 'max_pages_or_inactive' };
     }
 
+    const parentPageId = toObjectIdOrNull(data.discoveredFrom);
     const page = await Page.findOneAndUpdate(
       { deviceId: data.deviceId, crawlId: data.crawlId, url: data.url },
       {
@@ -160,7 +161,7 @@ export async function processCrawlPage(data: CrawlPageJobData, queues?: QueueBun
           domain,
           depth: data.depth,
           parentUrl: data.parentUrl || null,
-          parentPageId: data.discoveredFrom || null,
+          parentPageId,
           discoveredFrom: data.parentUrl || null,
           metadata: extracted.metadata,
           links: extracted.links,
@@ -283,6 +284,11 @@ export async function processCrawlPage(data: CrawlPageJobData, queues?: QueueBun
     );
     return { failed: true, url: data.url, error: message };
   }
+}
+
+function toObjectIdOrNull(value?: string | null) {
+  if (!value || !Types.ObjectId.isValid(value)) return null;
+  return new Types.ObjectId(value);
 }
 
 export function shouldRenderFallback(config: CrawlConfig, staticLinkCount: number) {

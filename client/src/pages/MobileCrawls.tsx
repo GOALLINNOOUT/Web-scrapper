@@ -41,7 +41,7 @@ export function MobileCrawls() {
   }, []);
 
   return (
-    <div className="mobile-page-enter mx-auto w-full max-w-[400px] px-4 pb-6">
+    <div className="mobile-page-enter mx-auto w-full max-w-[400px] px-4 pb-[112px] pt-2">
       <h2 className="mobile-section-label !px-0">Operations</h2>
       {isLoading ? <div className="grid gap-2">{[0, 1, 2].map((item) => <span className="mobile-skeleton h-28 rounded-xl" key={item} />)}</div> : null}
       {!isLoading && jobs.length === 0 ? <div className="rounded-xl bg-[var(--bg-base)] p-8 text-center"><Activity className="mx-auto text-[var(--accent)]" size={34} /><p className="mt-3 text-sm font-semibold">No crawl operations yet</p></div> : null}

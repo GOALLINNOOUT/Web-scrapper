@@ -97,7 +97,7 @@ function DesktopDataExplorer() {
   ];
 
   return (
-    <div className="grid gap-6">
+    <div className="desktop-page grid gap-6">
       <header>
         <span className="text-xs font-extrabold uppercase tracking-[0.14em] text-brand-600">Data Explorer</span>
         <h1 className="command-heading mt-2 text-[40px] font-extrabold leading-tight max-[900px]:text-3xl">Searchable intelligence engine</h1>

@@ -127,14 +127,14 @@ function DesktopDomains() {
   const hasCrawlEvidence = activeDomain ? hasDomainCrawlEvidence(activeDomain) : false;
 
   return (
-    <div className="grid gap-6">
+    <div className="desktop-page grid gap-6">
       <header>
         <span className="text-xs font-extrabold uppercase tracking-[0.14em] text-brand-600">Domain profiles</span>
         <h1 className="command-heading mt-2 text-[40px] font-extrabold leading-tight max-[900px]:text-3xl">Domain intelligence dossiers</h1>
         <p className="mt-2 text-[16px] text-[#636360]">Summaries, evidence, infrastructure, and signals for every crawled website.</p>
       </header>
 
-      <form className="grid grid-cols-[minmax(0,1fr)_auto] gap-3 rounded-lg border border-[#eaeae6] bg-white p-3 shadow-panel max-[640px]:grid-cols-1" onSubmit={lookupDomain}>
+      <form className="desktop-card grid grid-cols-[minmax(0,1fr)_auto] gap-3 rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-base)] p-3 shadow-panel max-[640px]:grid-cols-1" onSubmit={lookupDomain}>
         <label className="flex min-h-12 min-w-0 items-center gap-3 rounded-lg bg-[#f5f5f2] px-4">
           <Search className="shrink-0 text-brand-700" size={19} />
           <input
@@ -157,7 +157,7 @@ function DesktopDomains() {
 
       {isLoading ? <LoadingState title="Loading domain profiles" rows={6} /> : (
         <div className="grid grid-cols-[360px_minmax(0,1fr)] gap-5 max-[1100px]:grid-cols-1">
-          <section className="rounded-lg border border-[#eaeae6] bg-white p-4 shadow-panel">
+          <section className="desktop-card rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-base)] p-4 shadow-panel">
             <div className="mb-4 flex items-center justify-between">
               <h2 className="text-xl font-extrabold">Domains</h2>
               <span className="rounded-full bg-[#efefeb] px-3 py-1 text-sm font-extrabold text-[#636360]">{domains.length}</span>
@@ -190,7 +190,7 @@ function DesktopDomains() {
             </div>
           </section>
 
-          <section className="rounded-lg border border-[#eaeae6] bg-white p-6 shadow-panel">
+          <section className="desktop-card rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-base)] p-6 shadow-panel">
             {!activeDomain ? (
               <div className="grid min-h-[420px] place-items-center text-center">
                 <div>
@@ -304,7 +304,7 @@ function DesktopDomains() {
 
 function Metric({ icon: Icon, label, value, muted = false }: { icon: typeof Globe2; label: string; value: string | number; muted?: boolean }) {
   return (
-    <div className="rounded-[26px] bg-[#f5f5f2] p-5">
+    <div className="rounded-lg bg-[var(--bg-raised)] p-5">
       <div className="mb-4 flex items-center gap-2 text-sm font-extrabold text-[#636360]"><Icon size={18} /> {label}</div>
       <strong className={`block truncate ${muted ? 'text-base font-extrabold text-[#636360]' : 'text-3xl font-extrabold'}`}>{value}</strong>
     </div>

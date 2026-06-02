@@ -56,7 +56,7 @@ function DesktopSettings() {
   }
 
   return (
-    <div className="grid gap-6">
+    <div className="desktop-page grid gap-6">
       <header className="flex items-end justify-between gap-4 max-[760px]:grid">
         <div>
           <span className="text-xs font-extrabold uppercase tracking-[0.14em] text-brand-600">Settings</span>
@@ -67,7 +67,7 @@ function DesktopSettings() {
       </header>
 
       <div className="grid grid-cols-[230px_minmax(0,1fr)] gap-5 max-[900px]:grid-cols-1">
-        <nav className="grid h-fit gap-2 rounded-lg border border-[#eaeae6] bg-white p-3 shadow-panel max-[900px]:grid-cols-4 max-[640px]:grid-cols-2">
+        <nav className="desktop-card grid h-fit gap-2 rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-base)] p-3 shadow-panel max-[900px]:grid-cols-4 max-[640px]:grid-cols-2">
           {sections.map(({ key, icon: Icon }) => (
             <button className={`inline-flex items-center gap-2 rounded-lg px-3 py-2 text-left text-sm font-extrabold transition ${active === key ? 'bg-brand-600 text-white shadow-[0_10px_24px_rgba(59,130,246,0.24)]' : 'text-[#636360] hover:bg-[#f5f5f2]'}`} key={key} onClick={() => setActive(key)} type="button">
               <Icon size={16} />
@@ -201,7 +201,7 @@ interface SectionProps {
 
 function Panel({ icon: Icon, title, children }: { icon: LucideIcon; title: string; children: ReactNode }) {
   return (
-    <section className="rounded-lg border border-[#eaeae6] bg-white p-6 shadow-panel">
+    <section className="desktop-card rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-base)] p-6 shadow-panel">
       <div className="mb-5 flex items-center gap-3"><span className="grid h-11 w-11 place-items-center rounded-full bg-[#ebf2ff] text-brand-700"><Icon size={20} /></span><h2 className="text-2xl font-extrabold">{title}</h2></div>
       {children}
     </section>

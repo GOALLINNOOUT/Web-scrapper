@@ -146,7 +146,7 @@ function DesktopCrawlDetail() {
   }
 
   return (
-    <div className="grid gap-6">
+    <div className="desktop-page grid gap-6">
       <header>
         <span className="text-xs font-extrabold uppercase tracking-[0.14em] text-brand-600">Crawl detail</span>
         <h1 className="mt-2 break-words text-[40px] font-extrabold leading-tight max-[900px]:text-3xl">{job?.seedUrl || 'Loading crawl'}</h1>
@@ -157,14 +157,14 @@ function DesktopCrawlDetail() {
       {!isLoading ? <CrawlDetailPanel job={job} /> : null}
 
       {!isLoading && job?.status === 'failed' ? (
-        <section className="rounded-[26px] border border-red-200 bg-red-50 p-5 shadow-panel">
+        <section className="rounded-lg border border-red-200 bg-red-50 p-5 shadow-panel">
           <strong className="block text-sm font-extrabold text-red-800">Crawl failed</strong>
           <p className="mt-1 text-sm font-semibold text-red-700">{job.error || 'The website could not be reached.'}</p>
         </section>
       ) : null}
 
       {!isLoading && job ? (
-        <section className="rounded-[26px] border border-[#eaeae6] bg-white p-4 shadow-panel">
+        <section className="desktop-card rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-base)] p-4 shadow-panel">
           <CrawlActionButtons job={job} onChange={async () => {
             const [crawlJob, results, crawlSummary] = await Promise.all([
               api.getCrawl(job._id),
@@ -186,7 +186,7 @@ function DesktopCrawlDetail() {
       ) : null}
 
       {!isLoading && selectedResult ? (
-        <section className="rounded-lg border border-[#bfdbfe] bg-[#f0f5ff] p-4 shadow-panel">
+        <section className="rounded-lg border border-[#bfdbfe] bg-[var(--accent-subtle)] p-4 shadow-panel">
           <span className="text-xs font-extrabold uppercase tracking-[0.12em] text-brand-700">{selectedFocus === 'emails' ? 'Email source' : 'Selected page'}</span>
           <a className="mt-2 block break-words text-sm font-semibold text-brand-800 hover:text-brand-600" href={selectedResult.url} target="_blank" rel="noreferrer">
             {selectedResult.metadata?.title || selectedResult.url}
@@ -208,7 +208,7 @@ function DesktopCrawlDetail() {
       ) : null}
 
       {!isLoading ? <section className="grid grid-cols-2 gap-5 max-[980px]:grid-cols-1">
-        <div className="overflow-hidden rounded-lg border border-[#eaeae6] bg-white shadow-panel">
+        <div className="desktop-card overflow-hidden rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-base)] shadow-panel">
           <button className="flex w-full items-center justify-between gap-3 p-6 text-left" type="button" onClick={() => setEmailsOpen((value) => !value)}>
             <span>
               <h2 className="text-xl font-extrabold">Emails extracted</h2>
@@ -243,7 +243,7 @@ function DesktopCrawlDetail() {
             </div>
           ) : null}
         </div>
-        <div className="overflow-hidden rounded-lg border border-[#eaeae6] bg-white shadow-panel">
+        <div className="desktop-card overflow-hidden rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-base)] shadow-panel">
           <button className="flex w-full items-center justify-between gap-3 p-6 text-left" type="button" onClick={() => setSocialsOpen((value) => !value)}>
             <span>
               <h2 className="text-xl font-extrabold">Social profiles</h2>

@@ -7,7 +7,7 @@ interface LoadingStateProps {
 
 export function LoadingState({ title = 'Loading data', rows = 4 }: LoadingStateProps) {
   return (
-    <section className="grid min-h-56 content-center gap-5 rounded-lg border border-[#eaeae6] bg-white p-6 shadow-panel" aria-live="polite">
+    <section className="desktop-card grid min-h-56 content-center gap-5 rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-base)] p-6 shadow-panel" aria-live="polite">
       <div className="flex items-center justify-center gap-3 text-[#111110]">
         <span className="grid h-11 w-11 place-items-center rounded-full bg-brand-50 text-brand-600"><LoaderCircle className="animate-spin" size={17} /></span>
         <div>

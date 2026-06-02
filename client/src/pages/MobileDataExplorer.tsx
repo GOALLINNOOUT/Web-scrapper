@@ -1,6 +1,7 @@
 import { Filter, Link as LinkIcon, LoaderCircle, Mail, Share2, Table2, X } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { api } from '../api.js';
 import { useDebouncedValue } from '../hooks/useDebouncedValue.js';
@@ -72,7 +73,7 @@ export function MobileDataExplorer() {
   }
 
   return (
-    <div className="mobile-page-enter px-4 pb-6">
+    <div className="mobile-page-enter px-4 pb-[112px] pt-2">
       <div className="grid grid-cols-[minmax(0,1fr)_44px] gap-2">
         <label className="grid h-11 grid-cols-[18px_minmax(0,1fr)] items-center gap-2 rounded-xl border border-[var(--border-default)] bg-[var(--bg-base)] px-3">
           <Table2 size={17} className="text-[var(--text-secondary)]" />
@@ -162,8 +163,8 @@ function Empty({ text }: { text: string }) {
 
 function MobileFilterSheet({ open, filters, onChange, onClose }: { open: boolean; filters: ExplorerFilters; onChange: (filters: ExplorerFilters) => void; onClose: () => void }) {
   if (!open) return null;
-  return (
-    <div className="fixed inset-0 z-[300]">
+  return createPortal(
+    <div className="fixed inset-0 z-[1000]">
       <button className="mobile-sheet-overlay absolute inset-0 w-full" aria-label="Close filters" type="button" onClick={onClose} />
       <div className="mobile-sheet-panel absolute bottom-0 left-0 right-0 h-[70vh] p-5">
         <div className="mb-5 flex items-center justify-between">
@@ -182,7 +183,8 @@ function MobileFilterSheet({ open, filters, onChange, onClose }: { open: boolean
           <label className="flex min-h-12 items-center justify-between"><span>Has social links</span><input className="h-5 w-5 accent-[var(--accent)]" type="checkbox" checked={filters.hasSocial} onChange={(event) => onChange({ ...filters, hasSocial: event.target.checked })} /></label>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
 

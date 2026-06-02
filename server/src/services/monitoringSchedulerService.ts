@@ -121,7 +121,7 @@ export async function processMonitoringCheck(data: { profileId?: string; deviceI
       url,
       depth: 0,
       parentUrl: null,
-      discoveredFrom: 'monitoring'
+      discoveredFrom: null
     },
     opts: { jobId: crawlPageJobId(crawl._id.toString(), url) }
   })));

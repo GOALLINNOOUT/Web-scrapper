@@ -15,7 +15,7 @@ interface FilterBarProps {
 
 export function FilterBar({ filters, onChange }: FilterBarProps) {
   return (
-    <div className="grid grid-cols-[minmax(240px,1.2fr)_minmax(180px,0.8fr)_minmax(150px,0.6fr)_minmax(160px,0.6fr)_minmax(150px,0.5fr)_auto_auto] items-end gap-3 rounded-lg border border-[#eaeae6] bg-white p-4 shadow-panel max-[1180px]:grid-cols-3 max-[800px]:grid-cols-2 max-[620px]:grid-cols-1">
+    <div className="desktop-card grid grid-cols-[minmax(240px,1.2fr)_minmax(180px,0.8fr)_minmax(150px,0.6fr)_minmax(160px,0.6fr)_minmax(150px,0.5fr)_auto_auto] items-end gap-3 rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-base)] p-4 shadow-panel max-[1180px]:grid-cols-3 max-[800px]:grid-cols-2 max-[620px]:grid-cols-1">
       <label className="block min-w-0">
         <span className="mb-2 block text-[11px] font-extrabold uppercase tracking-[0.16em] text-[#636360]">Search</span>
         <input

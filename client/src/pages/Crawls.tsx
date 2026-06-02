@@ -49,7 +49,7 @@ function DesktopCrawls() {
   }, []);
 
   return (
-    <div className="grid gap-6">
+    <div className="desktop-page grid gap-6">
       <header className="flex items-end justify-between gap-4 max-[720px]:grid">
         <div>
           <span className="text-xs font-extrabold uppercase tracking-[0.14em] text-brand-600">Crawls</span>
@@ -58,7 +58,7 @@ function DesktopCrawls() {
         </div>
       </header>
       {isLoading ? <LoadingState title="Loading crawl jobs" /> : (
-        <section className="overflow-hidden rounded-lg border border-[#eaeae6] bg-white shadow-panel">
+        <section className="desktop-card overflow-hidden rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-base)] shadow-panel">
           <div className="grid grid-cols-[minmax(260px,1.4fr)_120px_160px_110px_170px_220px] gap-4 border-b border-[#eaeae6] px-5 py-4 text-xs font-extrabold uppercase tracking-[0.12em] text-[#636360] max-[1100px]:hidden">
             <span>Target</span>
             <span>Status</span>

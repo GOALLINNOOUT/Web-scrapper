@@ -147,38 +147,38 @@ function DesktopOverview() {
   const highlights = useMemo(() => buildHighlights(pages), [pages]);
 
   return (
-    <div className="command-page grid gap-6">
-      <header className="grid gap-6 rounded-lg bg-gradient-to-br from-[#f0f5ff] to-white p-6 shadow-panel">
+    <div className="desktop-page command-page grid gap-6">
+      <header className="desktop-hero grid gap-5 rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-base)] p-5 shadow-panel">
         <div className="flex flex-wrap items-end justify-between gap-5">
           <div>
-          <span className="text-xs font-extrabold uppercase tracking-[0.14em] text-brand-600">Overview</span>
-            <h1 className="command-heading mt-2 text-[44px] font-extrabold leading-tight max-[900px]:text-3xl">Web intelligence command center</h1>
-            <p className="mt-2.5 max-w-3xl text-[17px] leading-7 text-[#636360]">Start crawls, watch discoveries stream in, and focus on the signals that deserve attention.</p>
+          <span className="desktop-kicker text-xs font-extrabold uppercase tracking-[0.14em] text-[var(--accent)]">Overview</span>
+            <h1 className="command-heading mt-2 text-[38px] font-semibold leading-tight tracking-[-0.03em] max-[900px]:text-3xl">Executive intelligence desk</h1>
+            <p className="mt-2.5 max-w-3xl text-[16px] leading-7 text-[var(--text-secondary)]">Start crawls, watch discoveries stream in, and move from signal to evidence without leaving the command surface.</p>
           </div>
-          <div className="min-w-[260px] rounded-lg border border-[#eaeae6] bg-white p-4 shadow-sm">
+          <div className="desktop-status-card min-w-[280px] rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-raised)] p-4">
             <div className="flex items-center justify-between gap-4">
-              <span className="text-xs font-extrabold uppercase tracking-[0.14em] text-[#636360]">Right now</span>
+              <span className="text-xs font-extrabold uppercase tracking-[0.14em] text-[var(--text-secondary)]">Right now</span>
               <span className={`h-2.5 w-2.5 rounded-full ${activeJobs.length ? 'live-dot bg-[#16a34a]' : 'bg-[#c8c8c2]'}`} />
             </div>
             <div className="mt-5 flex items-end justify-between gap-4">
               <div>
                 <strong className="block font-mono text-4xl font-semibold leading-none text-[#111110]">{activeJobs.length}</strong>
-                <span className="mt-2 block text-sm font-semibold text-[#636360]">active crawl{activeJobs.length === 1 ? '' : 's'}</span>
+                <span className="mt-2 block text-sm font-semibold text-[var(--text-secondary)]">active crawl{activeJobs.length === 1 ? '' : 's'}</span>
               </div>
-              <div className="rounded-md bg-[#f5f5f2] px-3 py-2 text-right">
+              <div className="rounded-md bg-[var(--bg-base)] px-3 py-2 text-right">
                 <strong className="block font-mono text-lg font-semibold text-[#111110]">{pages.length}</strong>
-                <small className="block text-xs font-semibold text-[#636360]">recent pages</small>
+                <small className="block text-xs font-semibold text-[var(--text-secondary)]">recent pages</small>
               </div>
             </div>
           </div>
         </div>
 
         <form className="grid gap-3" onSubmit={startCrawl}>
-          <div className="grid grid-cols-[minmax(0,1fr)_auto_auto] gap-3 rounded-full border border-[#c8c8c2] bg-white p-2 shadow-[0_18px_45px_rgba(11,15,13,0.08)] max-[860px]:grid-cols-1 max-[860px]:rounded-lg">
+          <div className="desktop-launcher grid grid-cols-[minmax(0,1fr)_auto_auto] gap-3 rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-base)] p-2 shadow-[0_14px_38px_rgba(17,17,16,0.06)] max-[860px]:grid-cols-1 max-[860px]:rounded-lg">
             <label className="flex min-h-14 min-w-0 items-center gap-3 px-4">
               <Search className="shrink-0 text-brand-700" size={22} />
               <input
-                className="min-w-0 flex-1 border-0 bg-transparent text-lg font-semibold outline-none placeholder:text-[#9b9b97]"
+                className="min-w-0 flex-1 border-0 bg-transparent text-lg font-semibold text-[var(--text-primary)] outline-none placeholder:text-[var(--text-tertiary)]"
                 value={seedUrl}
                 onChange={(event) => setSeedUrl(event.target.value)}
                 placeholder="example.com or https://example.com"
@@ -186,12 +186,12 @@ function DesktopOverview() {
                 autoComplete="url"
               />
             </label>
-            <button className="inline-flex min-h-14 items-center justify-center gap-2 rounded-full border border-[#c8c8c2] bg-white px-5 font-extrabold text-brand-800 transition hover:bg-[#efefeb]" type="button" onClick={() => setShowAdvanced((value) => !value)}>
+            <button className="inline-flex min-h-14 items-center justify-center gap-2 rounded-md border border-[var(--border-default)] bg-[var(--bg-base)] px-5 font-extrabold text-[var(--accent)] transition hover:bg-[var(--bg-raised)]" type="button" onClick={() => setShowAdvanced((value) => !value)}>
               <Tags size={18} />
               Config
               <ChevronDown className={`transition ${showAdvanced ? 'rotate-180' : ''}`} size={16} />
             </button>
-            <button className="inline-flex min-h-14 items-center justify-center gap-2 rounded-full bg-brand-600 px-7 font-extrabold text-white transition hover:bg-brand-700 disabled:cursor-wait disabled:opacity-70" type="submit" disabled={isStarting}>
+            <button className="inline-flex min-h-14 items-center justify-center gap-2 rounded-md bg-[var(--accent)] px-7 font-extrabold text-white transition hover:bg-[var(--accent-hover)] disabled:cursor-wait disabled:opacity-70" type="submit" disabled={isStarting}>
               {isStarting ? <LoaderCircle className="animate-spin" size={18} /> : <Radar size={18} />}
               {isStarting ? 'Starting' : 'Start crawl'}
             </button>
@@ -222,7 +222,7 @@ function DesktopOverview() {
       {!isLoading ? (
         <>
         <div className="grid grid-cols-[minmax(0,1.1fr)_minmax(340px,0.9fr)] gap-5 max-[1100px]:grid-cols-1">
-          <section className="rounded-lg border border-[#eaeae6] bg-white p-6 shadow-panel">
+          <section className="desktop-card rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-base)] p-6 shadow-panel">
             <div className="mb-5 flex items-center justify-between gap-4">
               <div>
                 <h2 className="text-2xl font-extrabold">Operational focus</h2>
@@ -279,7 +279,7 @@ function DesktopOverview() {
             )}
           </section>
 
-          <section className="rounded-lg border border-[#eaeae6] bg-white p-6 shadow-panel">
+          <section className="desktop-card rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-base)] p-6 shadow-panel">
             <div className="mb-5 flex items-center justify-between gap-4">
               <div>
                 <h2 className="text-2xl font-extrabold">Live intelligence feed</h2>
@@ -335,7 +335,7 @@ function DesktopOverview() {
           </section>
         </div>
 
-        <section className="rounded-lg border border-[#eaeae6] bg-white p-6 shadow-panel">
+        <section className="desktop-card rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-base)] p-6 shadow-panel">
           <div className="mb-5 flex items-center justify-between gap-4">
             <div>
               <h2 className="text-2xl font-extrabold">Intelligence highlights</h2>

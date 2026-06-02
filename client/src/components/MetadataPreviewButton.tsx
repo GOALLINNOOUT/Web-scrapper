@@ -1,5 +1,6 @@
 import { Image, Info, LoaderCircle, Tags, X } from 'lucide-react';
 import { useState } from 'react';
+import { createPortal } from 'react-dom';
 import { api } from '../api.js';
 import { useActionLock } from '../lib/actionLocks.js';
 import { CopyButton } from './CopyButton.jsx';
@@ -47,16 +48,16 @@ export function MetadataPreviewButton({ url }: MetadataPreviewButtonProps) {
         Metadata
       </button>
 
-      {preview || error ? (
-        <div className="fixed inset-0 z-50 grid place-items-center overflow-hidden bg-black/30 px-4 py-6" onMouseDown={closePreview}>
-          <section className="max-h-[90vh] w-full max-w-3xl overflow-auto rounded-lg bg-white p-5 shadow-[0_28px_90px_rgba(0,0,0,0.22)]" onMouseDown={(event) => event.stopPropagation()}>
+      {preview || error ? createPortal((
+        <div className="fixed inset-0 z-[2147483000] grid place-items-center overflow-hidden bg-black/45 px-4 py-6 backdrop-blur-[3px]" role="dialog" aria-modal="true" aria-label="Live metadata preview" onMouseDown={closePreview}>
+          <section className="max-h-[min(92vh,920px)] w-full max-w-5xl overflow-auto rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-base)] p-5 text-[var(--text-primary)] shadow-[0_28px_90px_rgba(0,0,0,0.30)]" onMouseDown={(event) => event.stopPropagation()}>
             <div className="mb-4 flex items-start justify-between gap-3">
               <div className="min-w-0">
                 <span className="text-xs font-extrabold uppercase tracking-[0.14em] text-brand-600">Live metadata</span>
                 <h2 className="mt-1 truncate text-2xl font-extrabold">{preview?.metadata.title || url}</h2>
                 <p className="mt-1 break-words text-sm font-semibold text-[#636360]">{preview?.url || url}</p>
               </div>
-              <button className="grid h-9 w-9 place-items-center rounded-full bg-[#efefeb] text-[#636360]" type="button" onClick={closePreview}>
+              <button className="grid h-9 w-9 place-items-center rounded-full bg-[var(--bg-raised)] text-[var(--text-secondary)]" type="button" onClick={closePreview} aria-label="Close metadata preview">
                 <X size={16} />
               </button>
             </div>
@@ -126,7 +127,7 @@ export function MetadataPreviewButton({ url }: MetadataPreviewButtonProps) {
             ) : null}
           </section>
         </div>
-      ) : null}
+      ), document.body) : null}
     </>
   );
 }

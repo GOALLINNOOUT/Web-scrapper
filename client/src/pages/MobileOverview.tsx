@@ -66,14 +66,34 @@ export function MobileOverview() {
     const emailsFound = jobs.reduce((total, job) => total + (job.emailsFound || 0), 0);
     const monitoredDomains = monitoring?.health.monitoredDomains || monitoring?.profiles.length || monitoring?.domains.length || 0;
     const changesDetected = monitoring?.counts.changesToday || monitoring?.changeFeed.length || 0;
+    const pageTrend = trendFromWindows(
+      pages,
+      (page) => page.crawledAt,
+      (page) => 1
+    );
+    const emailTrend = trendFromWindows(
+      pages,
+      (page) => page.crawledAt,
+      (page) => page.emails.length
+    );
+    const domainTrend = trendFromWindows(
+      monitoring?.profiles || [],
+      (profile) => profile.createdAt,
+      () => 1
+    );
+    const changeTrend = trendFromWindows(
+      monitoring?.changeFeed || [],
+      (event) => event.detectedAt,
+      () => 1
+    );
 
     return [
-      { label: 'Pages Crawled', value: pagesCrawled, trend: '+12%', tone: 'positive' as const },
-      { label: 'Emails Found', value: emailsFound, trend: '+8%', tone: 'positive' as const },
-      { label: 'Domains Monitored', value: monitoredDomains, trend: '0%', tone: 'neutral' as const },
-      { label: 'Changes Detected', value: changesDetected, trend: changesDetected ? '+3' : '0', tone: changesDetected ? 'negative' as const : 'neutral' as const }
+      { label: 'Pages Crawled', value: pagesCrawled, ...pageTrend },
+      { label: 'Emails Found', value: emailsFound, ...emailTrend },
+      { label: 'Domains Monitored', value: monitoredDomains, ...domainTrend },
+      { label: 'Changes Detected', value: changesDetected, ...changeTrend }
     ];
-  }, [jobs, monitoring]);
+  }, [jobs, monitoring, pages]);
 
   function handleMetricScroll() {
     const row = metricRowRef.current;
@@ -86,7 +106,7 @@ export function MobileOverview() {
   }
 
   return (
-    <div className="mobile-page-enter pb-4">
+    <div className="mobile-page-enter pb-[112px]">
       <section aria-labelledby="metrics-heading">
         <h2 id="metrics-heading" className="mobile-section-label">Metrics</h2>
         <div className="no-scrollbar flex snap-x gap-3 overflow-x-auto px-5" ref={metricRowRef} onScroll={handleMetricScroll}>
@@ -176,6 +196,28 @@ function MetricCard({ metric, index, loading }: { metric: { label: string; value
       </span>
     </article>
   );
+}
+
+function trendFromWindows<T>(items: T[], getDate: (item: T) => string | undefined | null, getValue: (item: T) => number) {
+  const now = Date.now();
+  const day = 24 * 60 * 60 * 1000;
+  let current = 0;
+  let previous = 0;
+
+  for (const item of items) {
+    const time = new Date(getDate(item) || '').getTime();
+    if (!Number.isFinite(time)) continue;
+    const value = getValue(item);
+    if (time >= now - day) current += value;
+    else if (time >= now - day * 2) previous += value;
+  }
+
+  if (current === 0 && previous === 0) return { trend: 'No recent data', tone: 'neutral' as const };
+  if (previous === 0) return { trend: current > 0 ? `+${current}` : '0', tone: current > 0 ? 'positive' as const : 'neutral' as const };
+  const delta = current - previous;
+  const percent = Math.round((delta / Math.max(1, previous)) * 100);
+  if (percent === 0) return { trend: '0%', tone: 'neutral' as const };
+  return { trend: `${percent > 0 ? '+' : ''}${percent}%`, tone: percent > 0 ? 'positive' as const : 'negative' as const };
 }
 
 function CountUp({ value, className }: { value: number; className: string }) {

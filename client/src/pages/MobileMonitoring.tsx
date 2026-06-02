@@ -43,7 +43,7 @@ export function MobileMonitoring() {
   const grouped = useMemo(() => groupBySeverity(summary?.changeFeed || []), [summary]);
 
   return (
-    <div className="mobile-page-enter px-4 pb-6">
+    <div className="mobile-page-enter px-4 pb-[112px] pt-2">
       <form className="grid grid-cols-[minmax(0,1fr)_auto] gap-2" onSubmit={addDomain}>
         <input className="h-11 rounded-xl border border-[var(--border-default)] bg-[var(--bg-base)] px-3 text-sm outline-none" value={domain} onChange={(event) => { setDomain(event.target.value); setMonitorError(''); }} placeholder="Add domain to monitor" />
         <button

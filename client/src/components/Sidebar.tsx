@@ -12,9 +12,9 @@ const items = [
 
 export function Sidebar({ collapsed, onToggle }: { collapsed: boolean; onToggle: () => void }) {
   return (
-    <aside className={`relative m-3 flex h-[calc(100vh-24px)] flex-col overflow-visible rounded-lg border border-[#eaeae6] bg-white py-5 text-[#111110] shadow-panel transition-all duration-300 ease-[var(--ease-out-expo)] max-[900px]:m-0 max-[900px]:h-auto max-[900px]:rounded-none max-[900px]:p-4 ${collapsed ? 'px-3' : 'px-4'}`}>
+    <aside className={`desktop-sidebar relative m-3 flex h-[calc(100vh-24px)] flex-col overflow-visible rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-base)] py-5 text-[var(--text-primary)] shadow-panel transition-all duration-300 ease-[var(--ease-out-expo)] max-[900px]:m-0 max-[900px]:h-auto max-[900px]:rounded-none max-[900px]:p-4 ${collapsed ? 'px-3' : 'px-4'}`}>
       <button
-        className="absolute right-[-15px] top-8 z-20 hidden h-8 w-8 place-items-center rounded-full border border-[#eaeae6] bg-white text-[#636360] shadow-sm transition hover:border-[#c8c8c2] hover:bg-[#f5f5f2] hover:text-[#111110] max-[900px]:hidden min-[901px]:grid"
+        className="absolute right-[-15px] top-8 z-20 hidden h-8 w-8 place-items-center rounded-full border border-[var(--border-subtle)] bg-[var(--bg-base)] text-[var(--text-secondary)] shadow-sm transition hover:border-[var(--border-strong)] hover:bg-[var(--bg-raised)] hover:text-[var(--text-primary)] max-[900px]:hidden min-[901px]:grid"
         type="button"
         onClick={onToggle}
         title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
@@ -26,12 +26,12 @@ export function Sidebar({ collapsed, onToggle }: { collapsed: boolean; onToggle:
       <div className={`mb-8 flex items-center gap-3 max-[900px]:hidden ${collapsed ? 'justify-center' : ''}`}>
         <PremiumLogo />
         {!collapsed ? <div className="min-w-0">
-          <small className="block text-[11px] font-semibold uppercase tracking-[0.12em] text-[#9b9b97]">Command center</small>
-          <strong className="block truncate text-lg font-semibold text-[#111110]">Web Intel</strong>
+          <small className="block text-[11px] font-semibold uppercase tracking-[0.12em] text-[var(--text-tertiary)]">Command center</small>
+          <strong className="block truncate text-lg font-semibold text-[var(--text-primary)]">Web Intel</strong>
         </div> : null}
       </div>
 
-      {!collapsed ? <span className="mb-3 ml-2 text-[11px] font-semibold uppercase tracking-[0.12em] text-[#9b9b97] max-[900px]:hidden">Main</span> : null}
+      {!collapsed ? <span className="mb-3 ml-2 text-[11px] font-semibold uppercase tracking-[0.12em] text-[var(--text-tertiary)] max-[900px]:hidden">Main</span> : null}
       <nav className="grid gap-2 max-[900px]:grid-cols-3">
         {items.map((item) => {
           const Icon = item.icon;
@@ -39,7 +39,7 @@ export function Sidebar({ collapsed, onToggle }: { collapsed: boolean; onToggle:
             <NavLink
               key={item.to}
               to={item.to}
-              className={({ isActive }) => `flex min-h-12 items-center gap-3 rounded-md px-3 py-3 text-[15px] font-semibold transition max-[900px]:justify-center ${collapsed ? 'justify-center' : ''} ${isActive ? 'bg-[#ebf2ff] text-brand-800 shadow-[inset_3px_0_0_#0a6eff]' : 'text-[#636360] hover:bg-[#f5f5f2] hover:text-[#111110]'}`}
+              className={({ isActive }) => `desktop-sidebar-link flex min-h-12 items-center gap-3 rounded-md px-3 py-3 text-[15px] font-semibold transition max-[900px]:justify-center ${collapsed ? 'justify-center' : ''} ${isActive ? 'desktop-sidebar-link-active bg-[var(--accent-light)] text-[var(--accent)] shadow-[inset_3px_0_0_var(--accent)]' : 'text-[var(--text-secondary)] hover:bg-[var(--bg-raised)] hover:text-[var(--text-primary)]'}`}
               title={collapsed ? item.label : undefined}
             >
               <Icon size={18} />
@@ -48,6 +48,16 @@ export function Sidebar({ collapsed, onToggle }: { collapsed: boolean; onToggle:
           );
         })}
       </nav>
+      {!collapsed ? (
+        <div className="mt-auto grid gap-3 rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-raised)] p-3 max-[900px]:hidden">
+          <span className="flex items-center justify-between text-[11px] font-semibold uppercase tracking-[0.12em] text-[var(--text-tertiary)]">
+            Workspace
+            <span className="h-2 w-2 rounded-full bg-[var(--success)] shadow-[0_0_14px_color-mix(in_srgb,var(--success)_55%,transparent)]" />
+          </span>
+          <strong className="text-sm font-semibold text-[var(--text-primary)]">Live intelligence</strong>
+          <span className="text-xs font-medium leading-5 text-[var(--text-secondary)]">Crawls, domains, data, and monitoring share one evidence graph.</span>
+        </div>
+      ) : null}
     </aside>
   );
 }

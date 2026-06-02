@@ -179,7 +179,7 @@ function DesktopMonitoring() {
   if (isLoading || !summary) return <LoadingState title="Loading intelligence feed" rows={7} />;
 
   return (
-    <div className="grid min-w-0 gap-6 overflow-x-hidden">
+    <div className="desktop-page grid min-w-0 gap-6 overflow-x-hidden">
       <header className="flex items-end justify-between gap-4 max-[900px]:grid">
         <div>
           <span className="text-xs font-extrabold uppercase tracking-[0.14em] text-brand-600">Monitoring</span>
@@ -188,7 +188,7 @@ function DesktopMonitoring() {
         </div>
       </header>
 
-      <form className="grid min-w-0 grid-cols-[minmax(0,1fr)_240px_150px] gap-3 rounded-lg border border-[#eaeae6] bg-white p-4 shadow-panel max-[860px]:grid-cols-1" onSubmit={addDomain}>
+      <form className="desktop-card grid min-w-0 grid-cols-[minmax(0,1fr)_240px_150px] gap-3 rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-base)] p-4 shadow-panel max-[860px]:grid-cols-1" onSubmit={addDomain}>
         <div className="min-w-0">
           <label className="relative block">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-[#636360]" size={16} />
@@ -211,7 +211,7 @@ function DesktopMonitoring() {
       </div>
 
       <div className="grid min-w-0 grid-cols-[minmax(0,1.15fr)_minmax(0,0.85fr)] gap-5 max-[1180px]:grid-cols-1">
-        <section className="min-w-0 rounded-lg border border-[#eaeae6] bg-white p-5 shadow-panel">
+        <section className="desktop-card min-w-0 rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-base)] p-5 shadow-panel">
           <div className="mb-4 flex items-center justify-between gap-3">
             <h2 className="text-2xl font-extrabold">Change feed</h2>
             <Bell className="text-brand-600" size={20} />
@@ -231,7 +231,7 @@ function DesktopMonitoring() {
 
         <aside className="grid h-fit min-w-0 gap-5">
           {summary.suggestedPages.length > 0 ? (
-            <section className="min-w-0 rounded-lg border border-[#eaeae6] bg-white p-5 shadow-panel">
+            <section className="desktop-card min-w-0 rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-base)] p-5 shadow-panel">
               <button className="mb-4 flex w-full min-w-0 items-center justify-between gap-3 text-left" onClick={() => setSuggestionsCollapsed((value) => !value)} type="button" aria-expanded={!suggestionsCollapsed}>
                 <div>
                   <h2 className="flex items-center gap-2 text-xl font-extrabold">
@@ -268,7 +268,7 @@ function DesktopMonitoring() {
             </section>
           ) : null}
 
-          <section className="min-w-0 rounded-lg border border-[#eaeae6] bg-white p-5 shadow-panel">
+          <section className="desktop-card min-w-0 rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-base)] p-5 shadow-panel">
             <h2 className="text-xl font-extrabold">Monitored domains</h2>
             <div className="mt-4 grid gap-2">
               {summary.profiles.length === 0 ? <EmptyState title="No domains yet" body="Start by adding a competitor, lead, or site you want to watch." /> : null}
@@ -298,13 +298,13 @@ function DesktopMonitoring() {
           </section>
 
           {isLoadingDetail && !domainDetail ? (
-            <section className="min-w-0 rounded-lg border border-[#eaeae6] bg-white p-5 shadow-panel">
+            <section className="desktop-card min-w-0 rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-base)] p-5 shadow-panel">
               <LoadingState title="Loading domain intelligence" rows={4} />
             </section>
           ) : null}
 
           {domainDetail ? (
-            <section className="min-w-0 rounded-lg border border-[#eaeae6] bg-white p-5 shadow-panel">
+            <section className="desktop-card min-w-0 rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-base)] p-5 shadow-panel">
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
                   <h2 className="truncate text-xl font-extrabold">{domainDetail.profile.domain}</h2>
@@ -423,7 +423,7 @@ function PageList({ title, pages, selectedUrls, onToggle, onDismiss }: { title: 
 
 function MetricCard({ icon: Icon, label, value }: { icon: typeof Activity; label: string; value: number }) {
   return (
-    <section className="min-w-0 rounded-lg border border-[#eaeae6] bg-white p-5 shadow-panel">
+    <section className="desktop-card min-w-0 rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-base)] p-5 shadow-panel">
       <div className="mb-5 flex min-w-0 items-center justify-between gap-3"><span className="min-w-0 truncate text-sm font-bold text-[#636360]">{label}</span><span className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-[#ebf2ff] text-brand-700"><Icon size={18} /></span></div>
       <strong className="text-4xl font-extrabold">{value}</strong>
     </section>
