@@ -1,14 +1,8 @@
 services:
-  - type: keyvalue
-    name: web-intel-redis
-    plan: starter
-    ipAllowList: []
-    maxmemoryPolicy: allkeys-lru
-
   - type: web
     name: web-intel-api
     runtime: docker
-    plan: starter
+    plan: free
     dockerfilePath: ./docker/Dockerfile.api
     healthCheckPath: /health
     envVars:
@@ -17,51 +11,42 @@ services:
       - key: PERFORMANCE_MODE
         value: production
       - key: START_WORKERS_IN_API
-        value: "false"
+        value: "true"
       - key: WEB_WORKERS
         value: "1"
+      - key: GO_CRAWLER_ENABLED
+        value: "true"
+      - key: MAX_ACTIVE_CRAWLS
+        value: "2"
+      - key: GO_FETCH_CONCURRENCY
+        value: "5"
+      - key: GO_CRAWLER_NO_PAGE_CAP
+        value: "true"
+      - key: MAX_RUNTIME_PER_CRAWL_MINUTES
+        value: "20"
+      - key: GO_CRAWLER_IDLE_TIMEOUT_MS
+        value: "180000"
+      - key: PAGE_HTML_ARCHIVE_ENABLED
+        value: "true"
+      - key: PAGE_HTML_ARCHIVE_MAX_BYTES
+        value: "2097152"
+      - key: CRAWLER_RENDER_CONCURRENCY
+        value: "1"
+      - key: CRAWLER_RENDER_RATE
+        value: "1"
+      - key: CRAWLER_RENDER_TIMEOUT_MS
+        value: "15000"
+      - key: CRAWLER_MAX_CONTENT_BYTES
+        value: "2097152"
+      - key: CRAWLER_RESPECT_ROBOTS
+        value: "false"
+      - key: CRAWLER_USER_AGENT
+        value: WebIntelligenceCrawler/1.0
       - key: CLIENT_ORIGIN
         sync: false
       - key: MONGODB_URI
         sync: false
       - key: REDIS_URL
-        fromService:
-          type: keyvalue
-          name: web-intel-redis
-          property: connectionString
-      - key: CRAWLER_RESPECT_ROBOTS
-        value: "false"
-      - key: CRAWLER_USER_AGENT
-        value: WebIntelligenceCrawler/1.0
-
-  - type: worker
-    name: web-intel-worker
-    runtime: docker
-    plan: starter
-    dockerfilePath: ./docker/Dockerfile.worker
-    envVars:
-      - key: NODE_ENV
-        value: production
-      - key: PERFORMANCE_MODE
-        value: production
-      - key: MONGODB_URI
         sync: false
-      - key: REDIS_URL
-        fromService:
-          type: keyvalue
-          name: web-intel-redis
-          property: connectionString
-      - key: CRAWL_JOB_WORKER_CONCURRENCY
-        value: "4"
-      - key: CRAWL_PAGE_WORKER_CONCURRENCY
-        value: "50"
-      - key: CRAWL_PAGE_WORKER_RATE
-        value: "250"
-      - key: CRAWLER_DOMAIN_CONCURRENCY
-        value: "4"
-      - key: CRAWLER_DOMAIN_RATE_PER_SECOND
-        value: "5"
-      - key: CRAWLER_RESPECT_ROBOTS
-        value: "false"
-      - key: CRAWLER_USER_AGENT
-        value: WebIntelligenceCrawler/1.0
+      - key: MONITORING_ENCRYPTION_KEY
+        sync: false

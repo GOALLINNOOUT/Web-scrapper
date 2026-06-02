@@ -1,4 +1,5 @@
 import crypto from 'node:crypto';
+import zlib from 'node:zlib';
 import { config } from '../config/index.js';
 import { logger } from '../utils/logger.js';
 
@@ -113,6 +114,51 @@ export function decryptPageContent<T extends { text?: string }>(content: T): T {
 export function decryptPageDocument<T extends { content?: { text?: string } }>(page: T): T {
   if (!page.content) return page;
   return { ...page, content: decryptPageContent(page.content) };
+}
+
+export interface RawHtmlArchive {
+  stored: boolean;
+  encoding?: 'base64';
+  compression?: 'gzip';
+  encryption?: typeof algorithm;
+  iv?: string;
+  tag?: string;
+  data?: string;
+  originalBytes?: number;
+  compressedBytes?: number;
+  truncated?: boolean;
+  reason?: string;
+}
+
+export function archiveRawHtml(html: string): RawHtmlArchive | null {
+  if (!config.pageHtmlArchiveEnabled || !html) return null;
+
+  const key = getEncryptionKey();
+  if (!key) {
+    logger.warn('PAGE_HTML_ARCHIVE_ENABLED requires MONITORING_ENCRYPTION_KEY; raw HTML archive skipped');
+    return { stored: false, reason: 'missing_encryption_key' };
+  }
+
+  const raw = Buffer.from(html, 'utf8');
+  const maxBytes = config.pageHtmlArchiveMaxBytes;
+  const input = maxBytes > 0 && raw.length > maxBytes ? raw.subarray(0, maxBytes) : raw;
+  const compressed = zlib.gzipSync(input);
+  const iv = crypto.randomBytes(12);
+  const cipher = crypto.createCipheriv(algorithm, key, iv);
+  const encrypted = Buffer.concat([cipher.update(compressed), cipher.final()]);
+
+  return {
+    stored: true,
+    encoding: 'base64',
+    compression: 'gzip',
+    encryption: algorithm,
+    iv: iv.toString('base64'),
+    tag: cipher.getAuthTag().toString('base64'),
+    data: encrypted.toString('base64'),
+    originalBytes: raw.length,
+    compressedBytes: compressed.length,
+    truncated: input.length !== raw.length
+  };
 }
 
 function isEncryptedEnvelope(value: unknown): value is EncryptedEnvelope {

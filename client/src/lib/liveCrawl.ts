@@ -71,7 +71,7 @@ export function upsertJobList(jobs: CrawlJob[], job: CrawlJob) {
 }
 
 function isCrawlStatus(value: unknown): value is CrawlJob['status'] {
-  return typeof value === 'string' && ['queued', 'running', 'paused', 'completed', 'stopped', 'failed'].includes(value);
+  return typeof value === 'string' && ['queued', 'running', 'paused', 'completed', 'stopped', 'failed', 'interrupted'].includes(value);
 }
 
 export interface LiveCrawlPagePayload {

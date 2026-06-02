@@ -37,7 +37,7 @@ const crawlJobSchema = new mongoose.Schema({
   seedUrl: { type: String, required: true, index: true },
   status: {
     type: String,
-    enum: ['queued', 'running', 'paused', 'completed', 'stopped', 'failed'],
+    enum: ['queued', 'running', 'paused', 'completed', 'stopped', 'failed', 'interrupted'],
     default: 'queued',
     index: true
   },

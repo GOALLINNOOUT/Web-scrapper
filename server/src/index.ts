@@ -12,6 +12,7 @@ import { startQueueWorkers } from './queue/workers.js';
 import { config } from './config/index.js';
 import { logger } from './utils/logger.js';
 import { attachLiveWebSocketServer } from './services/liveEvents.js';
+import { markInterruptedCrawlsOnStartup } from './services/goCrawlRunner.js';
 
 dotenv.config();
 
@@ -23,6 +24,7 @@ async function main() {
   }
 
   await connectDatabase(config.mongodbUri);
+  await markInterruptedCrawlsOnStartup();
 
   const queues = config.redisUrl ? createQueues() : undefined;
   const crawlManager = new CrawlManager(queues);

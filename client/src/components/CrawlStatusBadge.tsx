@@ -11,6 +11,7 @@ export function CrawlStatusBadge({ status }: CrawlStatusBadgeProps) {
     paused: 'bg-violet-100 text-violet-800',
     completed: 'bg-green-100 text-green-800',
     failed: 'bg-red-100 text-red-800',
+    interrupted: 'bg-orange-100 text-orange-800',
     stopped: 'bg-amber-100 text-amber-800',
     queued: 'bg-zinc-100 text-zinc-700'
   };

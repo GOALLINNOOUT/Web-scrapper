@@ -4,11 +4,13 @@ import { createQueues } from './queue/queues.js';
 import { startQueueWorkers } from './queue/workers.js';
 import { config } from './config/index.js';
 import { logger } from './utils/logger.js';
+import { markInterruptedCrawlsOnStartup } from './services/goCrawlRunner.js';
 
 dotenv.config();
 
 async function main() {
   await connectDatabase(config.mongodbUri);
+  await markInterruptedCrawlsOnStartup();
   const queues = createQueues();
   const workers = startQueueWorkers(queues);
 

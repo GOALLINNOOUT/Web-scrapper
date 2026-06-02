@@ -22,6 +22,18 @@ export interface IPage {
     paragraphs: string[];
     wordCount: number;
   };
+  rawHtmlArchive?: {
+    stored: boolean;
+    encoding?: string;
+    compression?: string;
+    encryption?: string;
+    iv?: string;
+    tag?: string;
+    data?: string;
+    originalBytes?: number;
+    compressedBytes?: number;
+    truncated?: boolean;
+  } | null;
   classification: {
     pageType: string;
     confidence: number;
@@ -111,6 +123,19 @@ const contentSchema = new mongoose.Schema({
   wordCount: { type: Number, default: 0 }
 }, { _id: false });
 
+const rawHtmlArchiveSchema = new mongoose.Schema({
+  stored: { type: Boolean, default: false },
+  encoding: String,
+  compression: String,
+  encryption: String,
+  iv: String,
+  tag: String,
+  data: String,
+  originalBytes: Number,
+  compressedBytes: Number,
+  truncated: Boolean
+}, { _id: false });
+
 const classificationSchema = new mongoose.Schema({
   pageType: { type: String, default: 'general', index: true },
   confidence: { type: Number, default: 0 }
@@ -142,6 +167,7 @@ const pageSchema = new mongoose.Schema({
   social: { type: socialSchema, default: () => ({}) },
   techStack: { type: [String], default: [], index: true },
   content: { type: contentSchema, default: () => ({}) },
+  rawHtmlArchive: { type: rawHtmlArchiveSchema, default: null },
   classification: { type: classificationSchema, default: () => ({}) },
   score: { type: Number, default: 0, index: true },
   status: { type: String, enum: ['crawled', 'failed', 'skipped'], default: 'crawled', index: true },

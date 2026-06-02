@@ -1,4 +1,4 @@
-export type CrawlStatus = 'queued' | 'running' | 'paused' | 'completed' | 'stopped' | 'failed';
+export type CrawlStatus = 'queued' | 'running' | 'paused' | 'completed' | 'stopped' | 'failed' | 'interrupted';
 
 export interface ExtractConfig {
   links: boolean;

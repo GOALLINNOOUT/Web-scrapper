@@ -15,6 +15,7 @@ import { invalidateCrawlReads, invalidateDomainReads } from '../services/cacheIn
 import { reserveCrawlUrls } from '../services/urlDeduplicator.js';
 import { incrementMetric, setGauge } from '../utils/metrics.js';
 import { crawlPageJobId } from './jobIds.js';
+import { runGoCrawlJob } from '../services/goCrawlRunner.js';
 
 export interface WorkerBundle {
   crawlWorker: Worker;
@@ -43,6 +44,10 @@ export function startQueueWorkers(queues: QueueBundle): WorkerBundle {
         ...(crawl.config as unknown as Partial<CrawlConfig>),
         seedUrl: crawl.seedUrl
       } as CrawlConfig);
+      if (config.goCrawlerEnabled) {
+        logger.info({ crawlId, deviceId: crawl.deviceId }, 'Running crawl with Go CLI crawler');
+        return runGoCrawlJob(crawlId, crawl.deviceId, queues);
+      }
       const sitemapLinks = crawlConfig.extract.links && crawlConfig.discovery.sitemap && crawlConfig.maxDepth > 0
         ? await discoverSitemapUrls(crawl.seedUrl, Math.max(0, Math.min(crawlConfig.maxPages - 1, 250))).catch(() => [])
         : [];
@@ -80,7 +85,7 @@ export function startQueueWorkers(queues: QueueBundle): WorkerBundle {
     },
     {
       connection,
-      concurrency: config.crawlJobWorkerConcurrency
+      concurrency: config.goCrawlerEnabled ? config.goCrawlerMaxActiveCrawls : config.crawlJobWorkerConcurrency
     }
   );
 

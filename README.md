@@ -67,6 +67,37 @@ Workers do not need a load balancer or public port. To add capacity, start the s
 
 Workers do not need a load balancer or public port. To add capacity, start the same worker compose file on another server with the same `REDIS_URL` and `MONGODB_URI`.
 
+## Free-First Render Deployment With Go Crawler
+
+For a single free Render web service, the API can run BullMQ workers in-process and launch the Go crawler CLI per crawl:
+
+```text
+Vercel frontend -> Render web service
+                    Node API on $PORT
+                    Go crawler CLI child processes
+                    External Redis + MongoDB Atlas
+```
+
+Set these environment variables on Render:
+
+```bash
+START_WORKERS_IN_API=true
+GO_CRAWLER_ENABLED=true
+MAX_ACTIVE_CRAWLS=2
+GO_FETCH_CONCURRENCY=5
+GO_CRAWLER_NO_PAGE_CAP=true
+MAX_RUNTIME_PER_CRAWL_MINUTES=20
+PAGE_HTML_ARCHIVE_ENABLED=true
+PAGE_HTML_ARCHIVE_MAX_BYTES=2097152
+CRAWLER_RENDER_CONCURRENCY=1
+CRAWLER_RENDER_RATE=1
+REDIS_URL=redis://your-free-redis-provider
+MONGODB_URI=mongodb+srv://...
+MONITORING_ENCRYPTION_KEY=base64-encoded-32-byte-key
+```
+
+Node remains the public API and database owner. Go streams JSONL crawl events to Node, and Node persists pages, live progress, compressed encrypted HTML archives, summaries, and retryable interrupted crawl state. If Render restarts during a crawl, running Go crawls are marked `interrupted` so they can be retried.
+
 For a single-host smoke test with local Redis:
 
 ```bash
