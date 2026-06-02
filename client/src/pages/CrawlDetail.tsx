@@ -11,12 +11,20 @@ import { LoadingState } from '../components/LoadingState.jsx';
 import { MetadataPreviewButton } from '../components/MetadataPreviewButton.jsx';
 import { RetryCrawlButton } from '../components/RetryCrawlButton.jsx';
 import { type ClientLiveEvent, useLiveRefresh } from '../hooks/useLiveEvents.js';
+import { useMediaQuery } from '../hooks/useMediaQuery.js';
 import { applyLiveJobPatch, mergeLivePage, parseLiveCrawlJob, parseLiveCrawlPage } from '../lib/liveCrawl.js';
 import type { CrawlJob, CrawlPage, CrawlSummary, SocialLinks } from '../types.js';
+import { MobileCrawlDetail } from './MobileCrawlDetail.jsx';
 
 const PAGE_SIZE = 25;
 
 export function CrawlDetail() {
+  const isMobile = useMediaQuery('(max-width: 899px)');
+  if (isMobile) return <MobileCrawlDetail />;
+  return <DesktopCrawlDetail />;
+}
+
+function DesktopCrawlDetail() {
   const { id } = useParams();
   const location = useLocation();
   const routeState = location.state as { searchResult?: CrawlPage; focus?: 'emails' | 'tech' | 'page' } | null;

@@ -4,9 +4,11 @@ import { useEffect, useState } from 'react';
 import type { ReactNode } from 'react';
 import { api } from '../api.js';
 import { LoadingState } from '../components/LoadingState.jsx';
+import { useMediaQuery } from '../hooks/useMediaQuery.js';
 import { showToast } from '../toast.js';
 import { storeTheme } from '../theme.js';
 import type { WorkspaceSettings } from '../types.js';
+import { MobileSettings } from './MobileSettings.jsx';
 
 const sections = [
   { key: 'Account', icon: UserRound },
@@ -20,6 +22,12 @@ const sections = [
 ] as const;
 
 export function Settings() {
+  const isMobile = useMediaQuery('(max-width: 899px)');
+  if (isMobile) return <MobileSettings />;
+  return <DesktopSettings />;
+}
+
+function DesktopSettings() {
   const [settings, setSettings] = useState<WorkspaceSettings | null>(null);
   const [active, setActive] = useState<typeof sections[number]['key']>('Account');
   const [isSaving, setIsSaving] = useState(false);

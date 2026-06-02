@@ -4,8 +4,11 @@ import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../api.js';
 import { LoadingState } from '../components/LoadingState.jsx';
+import { useMediaQuery } from '../hooks/useMediaQuery.js';
+import { normalizeMonitorDomain } from '../lib/monitorDomain.js';
 import { showToast } from '../toast.js';
 import type { ChangeEvent, MonitoringProfile, MonitoringSummary } from '../types.js';
+import { MobileMonitoring } from './MobileMonitoring.jsx';
 
 const monitorTypes = [
   { value: 'competitive_intelligence', label: 'Competitive Intelligence' },
@@ -16,6 +19,12 @@ const monitorTypes = [
 ] as const;
 
 export function Monitoring() {
+  const isMobile = useMediaQuery('(max-width: 899px)');
+  if (isMobile) return <MobileMonitoring />;
+  return <DesktopMonitoring />;
+}
+
+function DesktopMonitoring() {
   const [summary, setSummary] = useState<MonitoringSummary | null>(null);
   const [activeDomain, setActiveDomain] = useState<string>('');
   const [domainDetail, setDomainDetail] = useState<{ profile: MonitoringProfile; events: ChangeEvent[] } | null>(null);
@@ -28,6 +37,9 @@ export function Monitoring() {
   const [acceptingSuggestionUrl, setAcceptingSuggestionUrl] = useState('');
   const [suggestionsCollapsed, setSuggestionsCollapsed] = useState(false);
   const [selectedRecommendationUrls, setSelectedRecommendationUrls] = useState<Set<string>>(new Set());
+  const [monitorError, setMonitorError] = useState('');
+  const normalizedDomain = normalizeMonitorDomain(domain);
+  const isValidDomain = Boolean(normalizedDomain);
 
   async function load() {
     const data = await api.getMonitoring();
@@ -84,15 +96,21 @@ export function Monitoring() {
 
   async function addDomain(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!domain.trim()) return;
+    if (!isValidDomain) {
+      setMonitorError('Enter a valid domain like example.com.');
+      return;
+    }
     setIsAdding(true);
+    setMonitorError('');
     try {
-      const result = await api.createMonitoringProfile({ domain, monitoringType });
+      const result = await api.createMonitoringProfile({ domain: normalizedDomain, monitoringType });
       showToast({ title: 'Monitoring started', description: result.profile.domain, tone: 'success' });
       setDomain('');
       await load();
       setActiveDomain(result.profile.domain);
       await refreshProfile(result.profile.domain);
+    } catch (error) {
+      setMonitorError(error instanceof Error ? error.message : 'This domain cannot be monitored.');
     } finally {
       setIsAdding(false);
     }
@@ -171,14 +189,18 @@ export function Monitoring() {
       </header>
 
       <form className="grid min-w-0 grid-cols-[minmax(0,1fr)_240px_150px] gap-3 rounded-lg border border-[#eaeae6] bg-white p-4 shadow-panel max-[860px]:grid-cols-1" onSubmit={addDomain}>
-        <label className="relative">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-[#636360]" size={16} />
-          <input className="h-12 w-full rounded-lg border border-[#eaeae6] bg-[#f5f5f2] pl-10 pr-3 text-sm font-semibold outline-none focus:border-brand-500 focus:bg-white" value={domain} onChange={(event) => setDomain(event.target.value)} placeholder="Add domain to monitor, e.g. example.com" />
-        </label>
+        <div className="min-w-0">
+          <label className="relative block">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-[#636360]" size={16} />
+            <input className="h-12 w-full rounded-lg border border-[#eaeae6] bg-[#f5f5f2] pl-10 pr-3 text-sm font-semibold outline-none focus:border-brand-500 focus:bg-white" value={domain} onChange={(event) => { setDomain(event.target.value); setMonitorError(''); }} placeholder="Add domain to monitor, e.g. example.com" />
+          </label>
+          {domain.trim() && !isValidDomain ? <p className="mt-2 text-xs font-bold text-red-700">Enter a domain like example.com. Paths, ports, and private hosts are not allowed.</p> : null}
+          {monitorError ? <p className="mt-2 text-xs font-bold text-red-700">{monitorError}</p> : null}
+        </div>
         <select className="h-12 rounded-lg border border-[#eaeae6] bg-[#f5f5f2] px-3 text-sm font-bold outline-none focus:border-brand-500 focus:bg-white" value={monitoringType} onChange={(event) => setMonitoringType(event.target.value as MonitoringProfile['monitoringType'])}>
           {monitorTypes.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
         </select>
-        <button className="inline-flex h-12 items-center justify-center gap-2 rounded-lg bg-brand-600 px-4 text-sm font-extrabold text-white hover:bg-brand-700 disabled:opacity-60" disabled={isAdding} type="submit"><Plus size={16} /> Add</button>
+        <button className="inline-flex h-12 items-center justify-center gap-2 rounded-lg bg-brand-600 px-4 text-sm font-extrabold text-white hover:bg-brand-700 disabled:opacity-60" disabled={isAdding || !isValidDomain} type="submit"><Plus size={16} /> Add</button>
       </form>
 
       <div className="grid min-w-0 grid-cols-[repeat(4,minmax(0,1fr))] gap-4 max-[1100px]:grid-cols-2 max-[640px]:grid-cols-1">

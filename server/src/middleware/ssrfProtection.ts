@@ -3,7 +3,7 @@ import net from 'node:net';
 import type { NextFunction, Request, Response } from 'express';
 
 export async function ssrfProtection(req: Request, res: Response, next: NextFunction) {
-  const candidate = String(req.body?.seedUrl || req.body?.url || '');
+  const candidate = String(req.body?.seedUrl || req.body?.url || req.body?.domain || '');
   if (!candidate) return next();
 
   const blocked = await isPrivateUrl(candidate);

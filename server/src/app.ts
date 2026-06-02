@@ -70,6 +70,7 @@ export function createApp({ crawlManager }: CreateAppOptions) {
   app.use('/results', dataRouter());
   app.use('/search', dataRouter());
   app.use('/domain', domainRouter());
+  app.use('/monitoring', ssrfProtection);
   app.use('/monitoring', monitoringRouter({ crawlManager }));
   app.use('/alerts', alertsRouter());
   app.use('/settings', settingsRouter());

@@ -6,3 +6,7 @@ npm-debug.log*
 coverage/
 .DS_Store
 logs/
+services/crawler-go/.gocache/
+services/crawler-go/.gomodcache/
+services/crawler-go/crawler.exe
+services/crawler-go/crawler-go

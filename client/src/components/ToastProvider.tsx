@@ -1,5 +1,6 @@
 import { CheckCircle2, Info, X, XCircle } from 'lucide-react';
 import { useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { TOAST_EVENT, type ToastPayload, type ToastTone } from '../toast.js';
 
 interface ToastItem extends ToastPayload {
@@ -63,8 +64,8 @@ export function ToastProvider() {
     return () => window.removeEventListener(TOAST_EVENT, handleToast);
   }, []);
 
-  return (
-    <div className="fixed right-5 top-5 z-50 grid w-[min(380px,calc(100vw-28px))] gap-3 max-[640px]:left-3.5 max-[640px]:right-3.5 max-[640px]:top-3.5 max-[640px]:w-auto" aria-live="polite">
+  return createPortal(
+    <div className="fixed right-5 top-5 z-[2147483647] grid w-[min(380px,calc(100vw-28px))] gap-3 max-[640px]:left-3.5 max-[640px]:right-3.5 max-[640px]:top-3.5 max-[640px]:w-auto" aria-live="polite">
       {toasts.map((toast) => {
         const Icon = icons[toast.tone];
         const tone = toneStyles[toast.tone];
@@ -85,6 +86,7 @@ export function ToastProvider() {
           </div>
         );
       })}
-    </div>
+    </div>,
+    document.body
   );
 }

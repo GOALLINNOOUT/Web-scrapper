@@ -3,9 +3,11 @@ import { FormEvent, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../api.js';
 import { LoadingState } from '../components/LoadingState.jsx';
+import { useMediaQuery } from '../hooks/useMediaQuery.js';
 import { normalizeSeedUrl } from '../lib/seedUrl.js';
 import { showToast } from '../toast.js';
 import type { CrawlConfig, DomainProfile } from '../types.js';
+import { MobileDomains } from './MobileDomains.jsx';
 
 const DOMAIN_CRAWL_CONFIG: Omit<CrawlConfig, 'seedUrl'> = {
   maxPages: 100,
@@ -28,6 +30,12 @@ const DOMAIN_CRAWL_CONFIG: Omit<CrawlConfig, 'seedUrl'> = {
 };
 
 export function Domains() {
+  const isMobile = useMediaQuery('(max-width: 899px)');
+  if (isMobile) return <MobileDomains />;
+  return <DesktopDomains />;
+}
+
+function DesktopDomains() {
   const navigate = useNavigate();
   const [domains, setDomains] = useState<DomainProfile[]>([]);
   const [activeDomain, setActiveDomain] = useState<DomainProfile | null>(null);

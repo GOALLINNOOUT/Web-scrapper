@@ -1,14 +1,26 @@
-import { Command, FileSearch, LoaderCircle, Radar, Search, X } from 'lucide-react';
+import { Bell, ChevronLeft, Command, FileSearch, Globe2, ListTree, LoaderCircle, Plus, Radar, Search, X } from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
-import { Link, Outlet, useNavigate } from 'react-router-dom';
+import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { api } from '../api.js';
 import { useDebouncedValue } from '../hooks/useDebouncedValue.js';
+import { LIVE_EVENT_NAME, type ClientLiveEvent } from '../hooks/useLiveEvents.js';
+import { useMediaQuery } from '../hooks/useMediaQuery.js';
 import { watchSystemTheme } from '../theme.js';
-import type { CrawlPage } from '../types.js';
+import type { CrawlJob, CrawlPage } from '../types.js';
 import { FloatingCrawlMonitor } from './FloatingCrawlMonitor.jsx';
+import { MobileNewCrawlSheet } from './MobileNewCrawlSheet.jsx';
+import { MobileSearchPanel } from './MobileSearchPanel.jsx';
 import { Sidebar } from './Sidebar.jsx';
 
 export function AppShell() {
+  const isMobile = useMediaQuery('(max-width: 899px)');
+
+  if (isMobile) return <MobileAppShell />;
+  return <DesktopAppShell />;
+}
+
+function DesktopAppShell() {
   const navigate = useNavigate();
   const searchRef = useRef<HTMLInputElement>(null);
   const [query, setQuery] = useState('');
@@ -172,4 +184,128 @@ export function AppShell() {
       </div>
     </div>
   );
+}
+
+function MobileAppShell() {
+  const navigate = useNavigate();
+  const location = useLocation();
+  const [sheetOpen, setSheetOpen] = useState(false);
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [hasUnreadMonitor, setHasUnreadMonitor] = useState(false);
+
+  useEffect(() => watchSystemTheme(), []);
+
+  useEffect(() => {
+    api.getMonitoring()
+      .then((data) => setHasUnreadMonitor((data.counts.unread || 0) > 0))
+      .catch(() => setHasUnreadMonitor(false));
+  }, []);
+
+  const isOverview = location.pathname === '/';
+  const isDetail = /^\/(crawls|domains)\/[^/]+/.test(location.pathname);
+  const title = getMobileTitle(location.pathname);
+
+  useEffect(() => {
+    if (location.pathname.startsWith('/monitoring')) setHasUnreadMonitor(false);
+  }, [location.pathname]);
+
+  useEffect(() => {
+    function handleLiveMonitorUpdate(event: Event) {
+      const detail = (event as CustomEvent<ClientLiveEvent>).detail;
+      if (!['workspace.updated', 'domain.updated'].includes(detail.type)) return;
+      if (!location.pathname.startsWith('/monitoring')) setHasUnreadMonitor(true);
+    }
+
+    window.addEventListener(LIVE_EVENT_NAME, handleLiveMonitorUpdate);
+    return () => window.removeEventListener(LIVE_EVENT_NAME, handleLiveMonitorUpdate);
+  }, [location.pathname]);
+
+  function openSheet() {
+    navigator.vibrate?.([10]);
+    setSheetOpen(true);
+  }
+
+  useEffect(() => {
+    function handleOpenNewCrawl() {
+      openSheet();
+    }
+
+    window.addEventListener('web-intel-open-new-crawl', handleOpenNewCrawl);
+    return () => window.removeEventListener('web-intel-open-new-crawl', handleOpenNewCrawl);
+  }, []);
+
+  function handleCreated(job: CrawlJob) {
+    navigate('/');
+    window.setTimeout(() => {
+      window.dispatchEvent(new CustomEvent('web-intel-mobile-crawl-created', { detail: job }));
+    }, 0);
+  }
+
+  return (
+    <div className="h-screen overflow-hidden bg-[var(--bg-canvas)] text-[var(--text-primary)]">
+      <main className="mobile-shell-scroll no-scrollbar">
+        <header className={`mobile-top-bar ${isOverview ? '' : 'sticky top-0 z-40 border-b border-[var(--border-subtle)] bg-[var(--bg-canvas)]/90 backdrop-blur-xl'}`}>
+          <div className="flex min-w-0 items-center gap-2">
+            {isDetail ? (
+              <button className="mobile-icon-btn -ml-2" type="button" aria-label="Go back" onClick={() => navigate(-1)}>
+                <ChevronLeft size={22} />
+              </button>
+            ) : null}
+            <h1 className="truncate text-[26px] font-semibold leading-none tracking-[-0.03em]">{title}</h1>
+          </div>
+          <button className="mobile-icon-btn" type="button" aria-label="Search workspace" onClick={() => setSearchOpen(true)}>
+            <Search size={18} />
+          </button>
+        </header>
+        <Outlet />
+      </main>
+
+      <nav className="mobile-tab-bar" aria-label="Primary">
+        <MobileTab to="/" label="Overview" icon={Radar} end />
+        <MobileTab to="/crawls" label="Crawls" icon={ListTree} />
+        <div className="flex flex-col items-center justify-start">
+          <button className="mobile-fab" type="button" aria-label="New Crawl" onClick={openSheet}>
+            <Plus size={22} />
+          </button>
+          <span className="mt-1 text-[10px] font-medium text-[var(--text-tertiary)]">New Crawl</span>
+        </div>
+        <MobileTab to="/domains" label="Domains" icon={Globe2} />
+        <MobileTab to="/monitoring" label="Monitor" icon={Bell} badge={hasUnreadMonitor} />
+      </nav>
+
+      <MobileNewCrawlSheet open={sheetOpen} onClose={() => setSheetOpen(false)} onCreated={handleCreated} />
+      <MobileSearchPanel open={searchOpen} onClose={() => setSearchOpen(false)} />
+    </div>
+  );
+}
+
+function MobileTab({ to, label, icon: Icon, badge, end = false }: { to: string; label: string; icon: LucideIcon; badge?: boolean; end?: boolean }) {
+  return (
+    <NavLink
+      className={({ isActive }) => `mobile-tab ${isActive ? 'text-[var(--accent)]' : 'text-[var(--text-tertiary)]'}`}
+      end={end}
+      to={to}
+    >
+      {({ isActive }) => (
+        <>
+          <span className="relative grid h-7 place-items-center">
+            <Icon className={isActive ? 'mobile-tab-active-icon' : ''} size={22} />
+            {badge ? <span className="mobile-alert-dot" /> : null}
+          </span>
+          <span className="text-[10px] font-medium">{label}</span>
+        </>
+      )}
+    </NavLink>
+  );
+}
+
+function getMobileTitle(pathname: string) {
+  if (pathname.startsWith('/crawls/')) return 'Crawl Detail';
+  if (pathname.startsWith('/crawls')) return 'Crawls';
+  if (pathname.startsWith('/domains/')) return 'Domain';
+  if (pathname.startsWith('/domains')) return 'Domains';
+  if (pathname.startsWith('/monitoring')) return 'Monitor';
+  if (pathname.startsWith('/settings')) return 'Settings';
+  if (pathname.startsWith('/data')) return 'Explorer';
+  return 'Overview';
 }

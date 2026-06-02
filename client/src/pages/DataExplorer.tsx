@@ -8,7 +8,9 @@ import { LoadMoreButton } from '../components/LoadMoreButton.jsx';
 import { LoadingState } from '../components/LoadingState.jsx';
 import { MetadataPreviewButton } from '../components/MetadataPreviewButton.jsx';
 import { useDebouncedValue } from '../hooks/useDebouncedValue.js';
+import { useMediaQuery } from '../hooks/useMediaQuery.js';
 import type { CrawlPage } from '../types.js';
+import { MobileDataExplorer } from './MobileDataExplorer.jsx';
 
 interface ExplorerFilters {
   q: string;
@@ -26,6 +28,12 @@ const PAGE_SIZE = 25;
 const DISPLAY_LIMIT = 25;
 
 export function DataExplorer() {
+  const isMobile = useMediaQuery('(max-width: 899px)');
+  if (isMobile) return <MobileDataExplorer />;
+  return <DesktopDataExplorer />;
+}
+
+function DesktopDataExplorer() {
   const [filters, setFilters] = useState<ExplorerFilters>({ q: '', domain: '', hasEmails: false, hasSocial: false, classification: '', techStack: '', minScore: 0 });
   const [mode, setMode] = useState<DataMode>('pages');
   const [visibleCount, setVisibleCount] = useState(DISPLAY_LIMIT);

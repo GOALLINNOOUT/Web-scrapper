@@ -9,6 +9,23 @@
     <meta name="application-name" content="Web Intelligence Crawler" />
     <meta name="theme-color" content="#0A6EFF" />
     <meta name="keywords" content="web intelligence crawler, web crawler, website monitoring, change detection, metadata extraction, email discovery, link intelligence, SEO crawler, SEO monitoring, SEO metadata audit, technical SEO" />
+    <script>
+      (function () {
+        try {
+          var preference = localStorage.getItem('webintel-theme') || 'system';
+          var dark = preference === 'dark' || (preference === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches);
+          document.documentElement.dataset.theme = dark ? 'dark' : 'light';
+          document.documentElement.dataset.themePreference = preference;
+          document.documentElement.style.colorScheme = dark ? 'dark' : 'light';
+        } catch (error) {
+          document.documentElement.dataset.theme = 'light';
+          document.documentElement.dataset.themePreference = 'system';
+        }
+      })();
+    </script>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet" />
     <link rel="canonical" href="https://web-scraps.vercel.app/" />
     <link rel="alternate" hreflang="en" href="https://web-scraps.vercel.app/" />
     <link rel="manifest" href="/site.webmanifest" />

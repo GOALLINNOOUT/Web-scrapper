@@ -6,10 +6,18 @@ import { CrawlActionButtons } from '../components/CrawlActionButtons.jsx';
 import { CrawlStatusBadge } from '../components/CrawlStatusBadge.jsx';
 import { LoadingState } from '../components/LoadingState.jsx';
 import { useLiveRefresh } from '../hooks/useLiveEvents.js';
+import { useMediaQuery } from '../hooks/useMediaQuery.js';
 import { parseLiveCrawlJob, parseLiveCrawlJobSnapshot, parseLiveCrawlPage, patchJobList, upsertJobList } from '../lib/liveCrawl.js';
 import type { CrawlJob } from '../types.js';
+import { MobileCrawls } from './MobileCrawls.jsx';
 
 export function Crawls() {
+  const isMobile = useMediaQuery('(max-width: 899px)');
+  if (isMobile) return <MobileCrawls />;
+  return <DesktopCrawls />;
+}
+
+function DesktopCrawls() {
   const [jobs, setJobs] = useState<CrawlJob[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 

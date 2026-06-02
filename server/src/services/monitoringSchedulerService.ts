@@ -7,6 +7,7 @@ import { retentionDate } from '../utils/retention.js';
 import { logger } from '../utils/logger.js';
 import { invalidateWorkspaceReads } from './cacheInvalidation.js';
 import { getWorkspaceSettings } from './workspaceSettingsService.js';
+import { isPrivateUrl } from '../middleware/ssrfProtection.js';
 
 const scheduleDurationsMs = {
   '12h': 12 * 60 * 60 * 1000,
@@ -71,15 +72,28 @@ export async function processMonitoringCheck(data: { profileId?: string; deviceI
   const urls = [...new Set(pages.length > 0 ? pages : [profile.seedUrl])];
   if (urls.length === 0) return { skipped: true, reason: 'no_urls' };
 
+  const safetyChecks = await Promise.all(urls.map(async (url) => ({ url, blocked: await isPrivateUrl(url) })));
+  const safeUrls = safetyChecks.filter((check) => !check.blocked).map((check) => check.url);
+  const blockedUrls = safetyChecks.filter((check) => check.blocked).map((check) => check.url);
+  if (safeUrls.length === 0) {
+    await MonitoringProfile.updateOne(
+      { _id: profile._id, deviceId },
+      { $set: { enabled: false, lastCheckedAt: new Date() } }
+    );
+    await invalidateWorkspaceReads(deviceId).catch(() => undefined);
+    logger.warn({ profileId, domain: profile.domain, blockedUrls }, 'Disabled monitoring profile with unsafe targets');
+    return { skipped: true, reason: 'unsafe_targets' };
+  }
+
   const settings = await getWorkspaceSettings(deviceId).catch(() => null);
   const crawling = settings?.crawling as { respectRobots?: boolean } | undefined;
   const config = withCrawlConfigDefaults({
     seedUrl: profile.seedUrl,
-    maxPages: urls.length,
+    maxPages: safeUrls.length,
     maxDepth: 0,
     sameDomainOnly: true,
     respectRobots: crawling?.respectRobots || false,
-    concurrency: Math.min(10, Math.max(1, urls.length)),
+    concurrency: Math.min(10, Math.max(1, safeUrls.length)),
     schedule: 'none',
     discovery: {
       sitemap: false,
@@ -99,7 +113,7 @@ export async function processMonitoringCheck(data: { profileId?: string; deviceI
     expiresAt: retentionDate()
   });
 
-  await queues.crawlPages.addBulk(urls.map((url) => ({
+  await queues.crawlPages.addBulk(safeUrls.map((url) => ({
     name: 'crawl-page',
     data: {
       deviceId,
@@ -120,8 +134,8 @@ export async function processMonitoringCheck(data: { profileId?: string; deviceI
   await MonitoringProfile.updateOne({ _id: profile._id, deviceId }, { $set: update });
   await invalidateWorkspaceReads(deviceId).catch(() => undefined);
 
-  logger.info({ profileId, crawlId: crawl._id.toString(), urls: urls.length }, 'Queued monitoring crawl');
-  return { crawlId: crawl._id.toString(), urls: urls.length };
+  logger.info({ profileId, crawlId: crawl._id.toString(), urls: safeUrls.length, blockedUrls: blockedUrls.length }, 'Queued monitoring crawl');
+  return { crawlId: crawl._id.toString(), urls: safeUrls.length, blockedUrls: blockedUrls.length };
 }
 
 function isDue(lastCheckedAt: Date | null, schedule: MonitoringSchedule, now: Date) {

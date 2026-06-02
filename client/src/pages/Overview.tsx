@@ -7,10 +7,12 @@ import { CrawlStatusBadge } from '../components/CrawlStatusBadge.jsx';
 import { LoadingState } from '../components/LoadingState.jsx';
 import { RetryCrawlButton } from '../components/RetryCrawlButton.jsx';
 import { useLiveRefresh } from '../hooks/useLiveEvents.js';
+import { useMediaQuery } from '../hooks/useMediaQuery.js';
 import { mergeLivePage, parseLiveCrawlJob, parseLiveCrawlJobSnapshot, parseLiveCrawlPage, patchJobList, upsertJobList } from '../lib/liveCrawl.js';
 import { normalizeSeedUrl } from '../lib/seedUrl.js';
 import { showToast } from '../toast.js';
 import type { CrawlConfig, CrawlJob, CrawlPage } from '../types.js';
+import { MobileOverview } from './MobileOverview.jsx';
 
 const DEFAULT_CRAWL_CONFIG: Omit<CrawlConfig, 'seedUrl'> = {
   maxPages: 100,
@@ -33,6 +35,11 @@ const DEFAULT_CRAWL_CONFIG: Omit<CrawlConfig, 'seedUrl'> = {
 };
 
 export function Overview() {
+  const isMobile = useMediaQuery('(max-width: 899px)');
+  return isMobile ? <MobileOverview /> : <DesktopOverview />;
+}
+
+function DesktopOverview() {
   const lastFailureToastId = useRef<string | null>(null);
   const initializedFailureToast = useRef(false);
   const [seedUrl, setSeedUrl] = useState('');
