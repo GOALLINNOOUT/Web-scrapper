@@ -336,6 +336,8 @@ async function getMongoStats() {
       storage_used_gb: 0,
       storage_total_gb: round(config.mongodbStorageLimitMb / 1024),
       storage_free_gb: round(config.mongodbStorageLimitMb / 1024),
+      logical_data_mb: 0,
+      logical_data_gb: 0,
       storage_used_percent: 0
     };
   }
@@ -344,10 +346,7 @@ async function getMongoStats() {
   recordMongoLatencySample(latency);
 
   const { stats, serverStatus } = await getMongoAdminStats(db);
-  const dataBytes = Number(stats?.dataSize || 0);
-  const usedMb = dataBytes / 1024 / 1024;
-  const totalMb = config.mongodbStorageLimitMb;
-  const freeMb = Math.max(0, totalMb - usedMb);
+  const storageMetrics = buildMongoStorageMetrics(stats, config.mongodbStorageLimitMb);
   return {
     queries_per_sec: mongoQueryRate(Number(serverStatus?.opcounters?.query || 0)),
     latency_p50: mongoLatencyPercentile(50),
@@ -355,12 +354,23 @@ async function getMongoStats() {
     latency_p99: mongoLatencyPercentile(99),
     connections_active: Number(serverStatus?.connections?.current || 0),
     slow_queries_count: Number(serverStatus?.metrics?.operation?.scanAndOrder || 0),
+    ...storageMetrics
+  };
+}
+
+export function buildMongoStorageMetrics(stats: { dataSize?: number; storageSize?: number; indexSize?: number } | null | undefined, totalMb: number) {
+  const logicalDataMb = Number(stats?.dataSize || 0) / 1024 / 1024;
+  const usedMb = (Number(stats?.storageSize || 0) + Number(stats?.indexSize || 0)) / 1024 / 1024;
+  const freeMb = Math.max(0, totalMb - usedMb);
+  return {
     storage_used_mb: round(usedMb),
     storage_total_mb: round(totalMb),
     storage_free_mb: round(freeMb),
     storage_used_gb: round(usedMb / 1024),
     storage_total_gb: round(totalMb / 1024),
     storage_free_gb: round(freeMb / 1024),
+    logical_data_mb: round(logicalDataMb),
+    logical_data_gb: round(logicalDataMb / 1024),
     storage_used_percent: round(totalMb ? (usedMb / totalMb) * 100 : 0)
   };
 }

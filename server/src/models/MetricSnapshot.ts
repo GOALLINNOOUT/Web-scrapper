@@ -56,6 +56,8 @@ const metricSnapshotSchema = new mongoose.Schema({
     storage_used_gb: { type: Number, default: 0 },
     storage_total_gb: { type: Number, default: 0 },
     storage_free_gb: { type: Number, default: 0 },
+    logical_data_mb: { type: Number, default: 0 },
+    logical_data_gb: { type: Number, default: 0 },
     storage_used_percent: { type: Number, default: 0 }
   },
   proxy_pool: {

@@ -101,8 +101,11 @@ function mongoStorageUnit(latest: any) {
 function mongoStorageTrend(latest: any) {
   const freeMb = Number(latest?.mongodb?.storage_free_mb || 0);
   const usedPercent = Number(latest?.mongodb?.storage_used_percent || 0);
+  const logicalMb = Number(latest?.mongodb?.logical_data_mb || 0);
+  const logicalGb = Number(latest?.mongodb?.logical_data_gb || 0);
+  const logical = logicalMb ? `${formatNumber(logicalMb)} MB logical` : logicalGb ? `${formatNumber(logicalGb * 1024)} MB logical` : '0 MB logical';
   if (!freeMb && !usedPercent) return 'usage unavailable';
-  return `${formatNumber(freeMb)} MB free, ${formatNumber(usedPercent)}% used`;
+  return `${logical}, ${formatNumber(freeMb)} MB free, ${formatNumber(usedPercent)}% used`;
 }
 
 function formatDateTime(value: unknown) {
