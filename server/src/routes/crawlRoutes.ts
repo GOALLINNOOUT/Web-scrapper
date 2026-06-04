@@ -9,9 +9,29 @@ import { rebuildCrawlSummary } from '../services/crawlSummaryService.js';
 import { config } from '../config/index.js';
 import { stableCacheKey, withCache } from '../utils/cache.js';
 import { decryptPageDocument } from '../services/changePayloadCrypto.js';
+import { timeMongoOperation } from '../utils/metrics.js';
 
 const COMPACT_PAGE_PROJECTION = {
-  content: 0
+  content: 0,
+  searchText: 0
+};
+
+const CRAWL_LIST_PROJECTION = {
+  seedUrl: 1,
+  status: 1,
+  config: 1,
+  pagesCrawled: 1,
+  emailsFound: 1,
+  socialLinksFound: 1,
+  requestedStop: 1,
+  requestedPause: 1,
+  error: 1,
+  createdAt: 1,
+  updatedAt: 1,
+  startedAt: 1,
+  completedAt: 1,
+  durationMs: 1,
+  deviceId: 1
 };
 
 export function crawlRouter({ crawlManager }: { crawlManager: CrawlManager }) {
@@ -29,10 +49,10 @@ export function crawlRouter({ crawlManager }: { crawlManager: CrawlManager }) {
   router.get('/', async (_req: Request, res: Response, next: NextFunction) => {
     try {
       const jobs = await withCache(`crawl:list:${_req.deviceId}`, config.cacheTtlCrawlMs, () => (
-        CrawlJob.find({ deviceId: _req.deviceId })
+        timeMongoOperation('list', 'crawljobs', () => CrawlJob.find({ deviceId: _req.deviceId }, CRAWL_LIST_PROJECTION)
           .sort({ createdAt: -1 })
           .limit(100)
-          .lean()
+          .lean())
       ));
       res.json(jobs);
     } catch (error) {
@@ -42,7 +62,7 @@ export function crawlRouter({ crawlManager }: { crawlManager: CrawlManager }) {
 
   router.get('/:id', async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const job = await CrawlJob.findOne({ _id: req.params.id, deviceId: req.deviceId }).lean();
+      const job = await timeMongoOperation('detail', 'crawljobs', () => CrawlJob.findOne({ _id: req.params.id, deviceId: req.deviceId }, CRAWL_LIST_PROJECTION).lean());
       if (!job) return res.status(404).json({ error: 'NOT_FOUND', message: 'Crawl job not found' });
       res.json(job);
     } catch (error) {
@@ -68,15 +88,15 @@ export function crawlRouter({ crawlManager }: { crawlManager: CrawlManager }) {
       });
       const resultPromise = (includeFull ? readResults() : withCache(cacheKey, config.cacheTtlDataMs, readResults));
       async function readResults() {
-        const pages = await Page.find(query, includeFull ? undefined : COMPACT_PAGE_PROJECTION)
+        const pages = await timeMongoOperation('crawlResults', 'pages', () => Page.find(query, includeFull ? undefined : COMPACT_PAGE_PROJECTION)
           .sort({ crawledAt: -1, _id: -1 })
           .limit(limit + 1)
-          .lean();
+          .lean());
 
         return toCursorPage(includeFull ? pages.map((page) => decryptPageDocument(page)) : pages, limit);
       }
       const [job, result] = await Promise.all([
-        CrawlJob.exists({ _id: req.params.id, deviceId: req.deviceId }),
+        timeMongoOperation('exists', 'crawljobs', () => CrawlJob.exists({ _id: req.params.id, deviceId: req.deviceId })),
         resultPromise
       ]);
 
@@ -90,11 +110,11 @@ export function crawlRouter({ crawlManager }: { crawlManager: CrawlManager }) {
 
   router.get('/:id/summary', async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const job = await CrawlJob.findOne({ _id: req.params.id, deviceId: req.deviceId }).lean();
+      const job = await timeMongoOperation('summaryJob', 'crawljobs', () => CrawlJob.findOne({ _id: req.params.id, deviceId: req.deviceId }, CRAWL_LIST_PROJECTION).lean());
       if (!job) return res.status(404).json({ error: 'NOT_FOUND', message: 'Crawl job not found' });
 
       const summary = await withCache(`crawl:summary:${req.deviceId}:${req.params.id}`, config.cacheTtlDataMs, async () => {
-        const existing = await CrawlSummary.findOne({ deviceId: req.deviceId, crawlId: req.params.id }).lean();
+        const existing = await timeMongoOperation('summary', 'crawlsummaries', () => CrawlSummary.findOne({ deviceId: req.deviceId, crawlId: req.params.id }).lean());
         if (!existing) return rebuildCrawlSummary(req.deviceId, String(req.params.id));
 
         const hasRawEmails = (job.emailsFound || 0) > 0 || (existing.counts?.rawEmailOccurrences || 0) > 0;

@@ -10,6 +10,7 @@ import { LoadingState } from '../components/LoadingState.jsx';
 import { MetadataPreviewButton } from '../components/MetadataPreviewButton.jsx';
 import { useDebouncedValue } from '../hooks/useDebouncedValue.js';
 import { useMediaQuery } from '../hooks/useMediaQuery.js';
+import { displayTechStack } from '../lib/format.js';
 import type { CrawlPage } from '../types.js';
 import { MobileDataExplorer } from './MobileDataExplorer.jsx';
 
@@ -201,7 +202,7 @@ function renderTable(mode: DataMode, pages: CrawlPage[], rows: ReturnType<typeof
         { key: 'links', label: 'Links', render: (page) => page.links?.length || 0 },
         { key: 'emails', label: 'Emails', render: (page) => page.emails?.length || 0 },
         { key: 'social', label: 'Socials', render: (page) => new Set(Object.values(page.social || {}).flat()).size },
-        { key: 'techStack', label: 'Tech', render: (page) => (page.techStack || []).slice(0, 3).join(', ') || 'None' },
+        { key: 'techStack', label: 'Tech', render: (page) => displayTechStack(page.techStack).slice(0, 3).join(', ') || 'None' },
         { key: 'score', label: 'Score', render: (page) => page.score ?? 0 }
       ]}
     />

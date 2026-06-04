@@ -10,9 +10,11 @@ import { extractSocialLinks } from '../src/extractors/social.js';
 import { detectTechStack } from '../src/extractors/techStack.js';
 import { isPrivateHost, isPrivateUrl } from '../src/middleware/ssrfProtection.js';
 import { sanitizeDeep } from '../src/middleware/inputSanitizer.js';
+import { hasComparableContent, primaryTechStack } from '../src/services/changeDetectionService.js';
 import { scoreMonitoringCandidate } from '../src/services/monitoringProfileService.js';
 import { shouldRenderFallback } from '../src/services/crawlPageProcessor.js';
 import { defaultWorkspaceSettings, mergeSettings } from '../src/services/workspaceSettingsService.js';
+import { buildDomainProfileData, normalizeDomainName } from '../src/intelligence/domain.service.js';
 import type { CrawlConfig } from '../src/types.js';
 import { isSameDomain, normalizeUrl } from '../src/utils/url.js';
 
@@ -29,6 +31,43 @@ test('checks same-domain links', () => {
   assert.equal(isSameDomain('https://www.example.com/a', 'https://example.com'), true);
   assert.equal(isSameDomain('https://example.com/a', 'https://www.example.com'), true);
   assert.equal(isSameDomain('https://docs.example.com/a', 'https://example.com'), false);
+});
+
+test('builds historical domain profile counts without URL dedupe', () => {
+  const profile = buildDomainProfileData([
+    {
+      url: 'https://example.com/',
+      emails: ['sales@example.com', 'hello@example.com'],
+      social: { twitter: ['https://twitter.com/acme'] },
+      classification: { pageType: 'home' },
+      techStack: ['Next.js'],
+      score: 80,
+      crawledAt: '2026-01-01T00:00:00.000Z'
+    },
+    {
+      url: 'https://example.com/',
+      emails: ['sales@example.com'],
+      social: { twitter: ['https://twitter.com/acme'], linkedin: ['https://linkedin.com/company/acme'] },
+      classification: { pageType: 'home' },
+      techStack: ['React'],
+      score: 60,
+      crawledAt: '2026-01-02T00:00:00.000Z'
+    }
+  ]);
+
+  assert.equal(profile.totalPages, 2);
+  assert.equal(profile.counts.uniquePages, 1);
+  assert.equal(profile.counts.rawEmailOccurrences, 3);
+  assert.equal(profile.counts.uniqueEmails, 2);
+  assert.equal(profile.counts.rawSocialOccurrences, 3);
+  assert.equal(profile.counts.uniqueSocialProfiles, 2);
+  assert.deepEqual(profile.emails, ['hello@example.com', 'sales@example.com']);
+  assert.deepEqual(profile.techStack, ['Next.js', 'React']);
+});
+
+test('normalizes www domain profile names', () => {
+  assert.equal(normalizeDomainName('WWW.Example.com'), 'example.com');
+  assert.equal(normalizeDomainName('example.com'), 'example.com');
 });
 
 test('extracts and deduplicates emails', () => {
@@ -313,6 +352,43 @@ test('detects common technology signatures', () => {
     'Vercel',
     'WordPress'
   ].sort());
+});
+
+test('detects Next.js app router runtime signatures', () => {
+  const $ = cheerio.load(`
+    <html>
+      <head><script>self.__next_f = self.__next_f || [];</script></head>
+      <body><next-route-announcer></next-route-announcer></body>
+    </html>
+  `);
+
+  assert.deepEqual(detectTechStack($, {}, $.html()), ['Next.js']);
+});
+
+test('detects modern framework and styling signatures conservatively', () => {
+  const $ = cheerio.load(`
+    <html data-astro-cid="abc">
+      <head>
+        <script src="/_astro/page.abc123.js"></script>
+        <link href="/assets/bootstrap.min.css" rel="stylesheet">
+      </head>
+      <body>
+        <div class="container-fluid navbar-expand bg-slate-900 text-white md:grid-cols-2"></div>
+      </body>
+    </html>
+  `);
+
+  assert.deepEqual(detectTechStack($, {}, $.html()).sort(), ['Astro', 'Bootstrap', 'TailwindCSS'].sort());
+});
+
+test('prefers framework stack over generic React for change display', () => {
+  assert.deepEqual(primaryTechStack(['Next.js', 'React', 'Vercel']), ['Next.js', 'Vercel']);
+  assert.deepEqual(primaryTechStack(['React', 'Vercel']), ['React', 'Vercel']);
+});
+
+test('requires a meaningful previous content baseline before content changes', () => {
+  assert.equal(hasComparableContent('', 'A complete page body with lots of text '.repeat(10)), false);
+  assert.equal(hasComparableContent('A complete page body with lots of text '.repeat(10), 'Another complete page body with lots of text '.repeat(10)), true);
 });
 
 test('detects technology from DOM attributes, cookies, and header values', () => {

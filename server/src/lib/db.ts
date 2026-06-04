@@ -2,6 +2,18 @@ import mongoose from 'mongoose';
 import { LEGACY_DEVICE_ID } from '../middleware/deviceScope.js';
 import { CrawlJob } from '../models/CrawlJob.js';
 import { Page } from '../models/Page.js';
+import { MetricSnapshot } from '../models/MetricSnapshot.js';
+import { QueueMetric } from '../models/QueueMetric.js';
+import { WorkerMetric } from '../models/WorkerMetric.js';
+import { DomainMetric } from '../models/DomainMetric.js';
+import { FailureEvent } from '../models/FailureEvent.js';
+import { AlertRecord } from '../models/AlertRecord.js';
+import { CostMetric } from '../models/CostMetric.js';
+import { AlertEvent } from '../models/AlertEvent.js';
+import { ChangeEvent } from '../models/ChangeEvent.js';
+import { CrawlSummary } from '../models/CrawlSummary.js';
+import { DomainProfile } from '../models/DomainProfile.js';
+import { MonitoringProfile } from '../models/MonitoringProfile.js';
 import { config } from '../config/index.js';
 
 export async function connectDatabase(uri?: string) {
@@ -21,7 +33,19 @@ export async function connectDatabase(uri?: string) {
   });
   await Promise.all([
     Page.syncIndexes().catch(() => undefined),
-    CrawlJob.syncIndexes().catch(() => undefined)
+    CrawlJob.syncIndexes().catch(() => undefined),
+    MetricSnapshot.syncIndexes().catch(() => undefined),
+    QueueMetric.syncIndexes().catch(() => undefined),
+    WorkerMetric.syncIndexes().catch(() => undefined),
+    DomainMetric.syncIndexes().catch(() => undefined),
+    FailureEvent.syncIndexes().catch(() => undefined),
+    AlertRecord.syncIndexes().catch(() => undefined),
+    CostMetric.syncIndexes().catch(() => undefined),
+    AlertEvent.syncIndexes().catch(() => undefined),
+    ChangeEvent.syncIndexes().catch(() => undefined),
+    CrawlSummary.syncIndexes().catch(() => undefined),
+    DomainProfile.syncIndexes().catch(() => undefined),
+    MonitoringProfile.syncIndexes().catch(() => undefined)
   ]);
   await backfillLegacyDeviceIds();
 }

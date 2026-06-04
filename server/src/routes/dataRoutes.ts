@@ -8,9 +8,11 @@ import { SOCIAL_KEYS } from '../extractors/social.js';
 import { config } from '../config/index.js';
 import { stableCacheKey, withCache } from '../utils/cache.js';
 import { decryptPageDocument } from '../services/changePayloadCrypto.js';
+import { timeMongoOperation } from '../utils/metrics.js';
 
 const COMPACT_PAGE_PROJECTION = {
-  content: 0
+  content: 0,
+  searchText: 0
 };
 
 export function dataRouter() {
@@ -66,20 +68,20 @@ export function dataRouter() {
       async function readData() {
         const projection = includeFull ? undefined : COMPACT_PAGE_PROJECTION;
         try {
-          const pages = await Page.find(query, projection)
+          const pages = await timeMongoOperation('list', 'pages', () => Page.find(query, projection)
             .sort({ crawledAt: -1, _id: -1 })
             .limit(limit + 1)
-            .lean();
+            .lean());
           return toCursorPage(includeFull ? pages.map((page) => decryptPageDocument(page)) : pages, limit);
         } catch (error) {
           if (!q || !isMissingTextIndexError(error)) throw error;
           const fallbackQuery: FilterQuery<IPage> = {
             $and: conditions.map((condition) => hasTextSearch(condition) ? regexSearchCondition(q) : condition)
           };
-          const pages = await Page.find(fallbackQuery, projection)
+          const pages = await timeMongoOperation('fallbackSearch', 'pages', () => Page.find(fallbackQuery, projection)
             .sort({ crawledAt: -1, _id: -1 })
             .limit(limit + 1)
-            .lean();
+            .lean());
           return toCursorPage(includeFull ? pages.map((page) => decryptPageDocument(page)) : pages, limit);
         }
       }

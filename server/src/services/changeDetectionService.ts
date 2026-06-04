@@ -1,9 +1,11 @@
 import { AlertEvent } from '../models/AlertEvent.js';
 import { ChangeEvent } from '../models/ChangeEvent.js';
+import { MonitoringProfile } from '../models/MonitoringProfile.js';
 import { Page } from '../models/Page.js';
 import { PageChange } from '../models/PageChange.js';
-import { domainFromUrl } from '../utils/url.js';
+import { domainFromUrl, normalizeUrl } from '../utils/url.js';
 import { decryptPageDocument, encryptChangePayload } from './changePayloadCrypto.js';
+import { timeMongoOperation } from '../utils/metrics.js';
 
 export async function detectPageChanges(input: {
   deviceId: string;
@@ -12,43 +14,48 @@ export async function detectPageChanges(input: {
   crawlId: string;
   contentHash: string;
 }) {
-  const previous = await Page.findOne(
+  const monitoring = await getMonitoringContext(input.deviceId, input.url, input.crawlId);
+  if (!monitoring) return [];
+
+  const previous = await timeMongoOperation('changeDetection.previousPage', 'pages', () => Page.findOne(
     { deviceId: input.deviceId, url: input.url, crawlId: { $ne: input.crawlId }, status: 'crawled' },
     { contentHash: 1, metadata: 1, emails: 1, social: 1, techStack: 1, content: 1, score: 1 },
     { sort: { crawledAt: -1 } }
-  ).lean();
+  ).lean());
 
   if (!previous) return [];
 
-  const current = await Page.findOne(
+  const current = await timeMongoOperation('changeDetection.currentPage', 'pages', () => Page.findOne(
     { deviceId: input.deviceId, url: input.url, crawlId: input.crawlId },
     { metadata: 1, emails: 1, social: 1, techStack: 1, content: 1, score: 1 }
-  ).lean();
+  ).lean());
 
   if (!current) return [];
   const previousPage = decryptPageDocument(previous);
   const currentPage = decryptPageDocument(current);
 
   const changes: Array<{ type: string; severity: 'low' | 'medium' | 'high'; data?: Record<string, unknown>; oldValue?: unknown; newValue?: unknown; reason?: string }> = [];
-  if (previous.contentHash !== input.contentHash) {
+  if (monitoring.signals.has('content') && previous.contentHash !== input.contentHash && hasComparableContent(previousPage.content?.text, currentPage.content?.text)) {
     const contentDiff = summarizeContentChange(previousPage.content?.text || '', currentPage.content?.text || '');
-    changes.push({
-      type: 'content_changed',
-      severity: 'medium',
-      data: contentDiff,
-      oldValue: { excerpt: contentDiff.beforeExcerpt },
-      newValue: { excerpt: contentDiff.afterExcerpt },
-      reason: 'Page body content changed since the previous crawl.'
-    });
+    if (contentDiff.addedText.length > 0 || contentDiff.removedText.length > 0) {
+      changes.push({
+        type: 'content_changed',
+        severity: 'medium',
+        data: contentDiff,
+        oldValue: { excerpt: contentDiff.beforeExcerpt },
+        newValue: { excerpt: contentDiff.afterExcerpt },
+        reason: 'Page body content changed since the previous crawl.'
+      });
+    }
   }
 
-  const newEmails = (currentPage.emails || []).filter((email) => !(previousPage.emails || []).includes(email));
+  const newEmails = monitoring.signals.has('emails') ? (currentPage.emails || []).filter((email) => !(previousPage.emails || []).includes(email)) : [];
   if (newEmails.length > 0) changes.push({ type: 'new_email', severity: 'high', data: { emails: newEmails }, newValue: { emails: newEmails }, reason: 'New contact emails were discovered.' });
 
-  const removedEmails = (previousPage.emails || []).filter((email) => !(currentPage.emails || []).includes(email));
+  const removedEmails = monitoring.signals.has('emails') ? (previousPage.emails || []).filter((email) => !(currentPage.emails || []).includes(email)) : [];
   if (removedEmails.length > 0) changes.push({ type: 'removed_email', severity: 'medium', data: { emails: removedEmails }, oldValue: { emails: removedEmails }, reason: 'Previously discovered emails disappeared from the page.' });
 
-  if (currentPage.metadata?.title !== previousPage.metadata?.title) {
+  if (monitoring.signals.has('metadata') && hasMeaningfulValue(previousPage.metadata?.title) && hasMeaningfulValue(currentPage.metadata?.title) && currentPage.metadata?.title !== previousPage.metadata?.title) {
     changes.push({
       type: 'metadata_changed',
       severity: 'low',
@@ -61,7 +68,7 @@ export async function detectPageChanges(input: {
 
   const previousHeadings = previousPage.content?.headings || [];
   const currentHeadings = currentPage.content?.headings || [];
-  if (JSON.stringify(previousHeadings) !== JSON.stringify(currentHeadings)) {
+  if (monitoring.signals.has('content') && previousHeadings.length > 0 && currentHeadings.length > 0 && JSON.stringify(previousHeadings) !== JSON.stringify(currentHeadings)) {
     changes.push({
       type: 'heading_changed',
       severity: 'medium',
@@ -71,7 +78,7 @@ export async function detectPageChanges(input: {
     });
   }
 
-  const priceChange = detectPriceChange(previousPage.content?.text || '', currentPage.content?.text || '');
+  const priceChange = monitoring.signals.has('content') ? detectPriceChange(previousPage.content?.text || '', currentPage.content?.text || '') : null;
   if (priceChange) {
     changes.push({
       type: 'price_changed',
@@ -83,17 +90,23 @@ export async function detectPageChanges(input: {
     });
   }
 
-  const socialChange = diffArrayValues(Object.values(previousPage.social || {}).flat().map(String), Object.values(currentPage.social || {}).flat().map(String));
+  const socialChange = monitoring.signals.has('social')
+    ? diffArrayValues(Object.values(previousPage.social || {}).flat().map(String), Object.values(currentPage.social || {}).flat().map(String))
+    : { added: [], removed: [] };
   if (socialChange.added.length > 0 || socialChange.removed.length > 0) {
     changes.push({ type: 'social_changed', severity: 'medium', data: socialChange, oldValue: { social: socialChange.removed }, newValue: { social: socialChange.added }, reason: 'Social profiles changed.' });
   }
 
-  const techChange = diffArrayValues((previousPage.techStack || []).map(String), (currentPage.techStack || []).map(String));
+  const previousTech = primaryTechStack((previousPage.techStack || []).map(String));
+  const currentTech = primaryTechStack((currentPage.techStack || []).map(String));
+  const techChange = monitoring.signals.has('tech') && previousTech.length > 0 && currentTech.length > 0
+    ? diffArrayValues(previousTech, currentTech)
+    : { added: [], removed: [] };
   if (techChange.added.length > 0 || techChange.removed.length > 0) {
     changes.push({ type: 'tech_stack_changed', severity: 'medium', data: techChange, oldValue: { techStack: techChange.removed }, newValue: { techStack: techChange.added }, reason: 'Technology signatures changed.' });
   }
 
-  if (Math.abs((currentPage.score || 0) - (previousPage.score || 0)) >= 20) {
+  if (monitoring.signals.has('content') && Math.abs((currentPage.score || 0) - (previousPage.score || 0)) >= 20) {
     changes.push({ type: 'score_changed', severity: 'medium', data: { from: previousPage.score || 0, to: currentPage.score || 0 }, oldValue: { score: previousPage.score || 0 }, newValue: { score: currentPage.score || 0 }, reason: 'The page importance score moved materially.' });
   }
 
@@ -147,6 +160,7 @@ export async function detectPageChanges(input: {
 function detectPriceChange(previousText: string, currentText: string) {
   const previous = extractPrices(previousText);
   const current = extractPrices(currentText);
+  if (previous.length === 0 || current.length === 0) return null;
   const diff = diffArrayValues(previous, current);
   return diff.added.length > 0 || diff.removed.length > 0 ? diff : null;
 }
@@ -193,6 +207,20 @@ function extractPrices(text: string) {
     .map((value) => value.replace(/\s+/g, ' ').trim().toLowerCase()))];
 }
 
+export function hasComparableContent(previousText?: string, currentText?: string) {
+  return normalizeText(previousText || '').length >= 120 && normalizeText(currentText || '').length >= 120;
+}
+
+function hasMeaningfulValue(value: unknown) {
+  return typeof value === 'string' && value.trim().length > 0;
+}
+
+export function primaryTechStack(values: string[]) {
+  const unique = [...new Set(values.filter(Boolean))];
+  if (unique.includes('Next.js')) return unique.filter((value) => value !== 'React');
+  return unique;
+}
+
 function diffArrayValues(previous: string[], current: string[]) {
   const before = [...new Set(previous.filter(Boolean))];
   const after = [...new Set(current.filter(Boolean))];
@@ -208,4 +236,28 @@ function toLegacyChangeType(type: string) {
   if (type === 'metadata_changed') return 'metadata_changed';
   if (type === 'score_changed') return 'score_changed';
   return 'content_changed';
+}
+
+async function getMonitoringContext(deviceId: string, url: string, crawlId: string) {
+  const domain = domainFromUrl(url).toLowerCase().replace(/^www\./, '');
+  if (!domain) return null;
+  const profile = await timeMongoOperation('changeDetection.monitoringProfile', 'monitoringprofiles', () => MonitoringProfile.findOne({
+    deviceId,
+    enabled: true,
+    domain: { $in: [domain, `www.${domain}`] }
+  }).lean());
+  if (!profile) return null;
+  if (String(profile.discoveryCrawlId || '') === String(crawlId)) return null;
+
+  const normalizedUrl = normalizeUrl(url) || url;
+  const monitoredPages = (profile.monitoredPages || []).filter((page) => page.enabled !== false);
+  if (monitoredPages.length === 0) {
+    const seedUrl = normalizeUrl(profile.seedUrl) || profile.seedUrl;
+    if (normalizedUrl !== seedUrl) return null;
+    return { signals: new Set(['content', 'metadata', 'emails', 'social', 'tech']) };
+  }
+
+  const match = monitoredPages.find((page) => (normalizeUrl(page.url) || page.url) === normalizedUrl);
+  if (!match) return null;
+  return { signals: new Set((match.signals || ['content', 'metadata', 'emails', 'social', 'tech']).map(String)) };
 }

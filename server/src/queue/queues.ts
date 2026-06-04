@@ -19,7 +19,7 @@ export function createQueues() {
     attempts: 3,
     backoff: { type: 'exponential' as const, delay: 2000 },
     removeOnComplete: { count: 1000, age: 3600 },
-    removeOnFail: { count: 5000 }
+    removeOnFail: { count: 500, age: 3600 }
   };
 
   return {

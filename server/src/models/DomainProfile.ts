@@ -23,6 +23,14 @@ const dnsSchema = new mongoose.Schema({
   refreshedAt: Date
 }, { _id: false });
 
+const countsSchema = new mongoose.Schema({
+  rawEmailOccurrences: { type: Number, default: 0 },
+  rawSocialOccurrences: { type: Number, default: 0 },
+  uniqueEmails: { type: Number, default: 0 },
+  uniqueSocialProfiles: { type: Number, default: 0 },
+  uniquePages: { type: Number, default: 0 }
+}, { _id: false });
+
 const domainProfileSchema = new mongoose.Schema({
   deviceId: { type: String, required: true, index: true },
   domain: { type: String, required: true, index: true },
@@ -30,6 +38,7 @@ const domainProfileSchema = new mongoose.Schema({
   emails: { type: [String], default: [] },
   socials: { type: socialSchema, default: () => ({}) },
   contentCategories: { type: Object, default: () => ({}) },
+  counts: { type: countsSchema, default: () => ({}) },
   avgScore: { type: Number, default: 0 },
   whois: { type: whoisSchema, default: () => ({}) },
   dns: { type: dnsSchema, default: () => ({}) },
@@ -40,6 +49,7 @@ const domainProfileSchema = new mongoose.Schema({
 
 domainProfileSchema.index({ deviceId: 1, domain: 1 }, { unique: true });
 domainProfileSchema.index({ deviceId: 1, avgScore: -1 });
+domainProfileSchema.index({ deviceId: 1, lastCrawledAt: -1, avgScore: -1 });
 
 export interface IDomainProfile {
   deviceId: string;
@@ -48,6 +58,13 @@ export interface IDomainProfile {
   emails: string[];
   socials: Partial<SocialLinks>;
   contentCategories: Record<string, number>;
+  counts?: {
+    rawEmailOccurrences: number;
+    rawSocialOccurrences: number;
+    uniqueEmails: number;
+    uniqueSocialProfiles: number;
+    uniquePages: number;
+  };
   avgScore: number;
   whois?: {
     registrar?: string;

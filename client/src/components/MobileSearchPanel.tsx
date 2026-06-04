@@ -1,4 +1,4 @@
-import { FileSearch, LoaderCircle, Search, Settings, X } from 'lucide-react';
+import { FileSearch, LoaderCircle, Search, X } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../api.js';
@@ -94,9 +94,6 @@ export function MobileSearchPanel({ open, onClose }: MobileSearchPanelProps) {
           />
           {query ? <button className="grid h-7 w-7 place-items-center rounded-full bg-[var(--bg-raised)] text-[var(--text-secondary)]" type="button" aria-label="Clear search" onClick={() => setQuery('')}><X size={14} /></button> : null}
         </div>
-        <button className="mobile-icon-btn" type="button" aria-label="Settings" onClick={() => { onClose(); navigate('/settings'); }}>
-          <Settings size={18} />
-        </button>
         <button className="mobile-icon-btn" type="button" aria-label="Close search" onClick={onClose}>
           <X size={18} />
         </button>

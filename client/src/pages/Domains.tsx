@@ -5,6 +5,7 @@ import { api } from '../api.js';
 import { ErrorState } from '../components/ErrorState.jsx';
 import { LoadingState } from '../components/LoadingState.jsx';
 import { useMediaQuery } from '../hooks/useMediaQuery.js';
+import { displayTechStack } from '../lib/format.js';
 import { normalizeSeedUrl } from '../lib/seedUrl.js';
 import { showToast } from '../toast.js';
 import type { CrawlConfig, DomainProfile } from '../types.js';
@@ -191,8 +192,8 @@ function DesktopDomains() {
                     {hasDomainCrawlEvidence(domain) ? (
                       <>
                         <span>{domain.totalPages} pages</span>
-                        <span>{domain.emails.length} emails</span>
-                        <span>{countSocials(domain)} socials</span>
+                        <span>{countRawEmails(domain)} emails</span>
+                        <span>{countRawSocials(domain)} socials</span>
                       </>
                     ) : (
                       <span className="text-brand-700">Lookup only</span>
@@ -248,8 +249,8 @@ function DesktopDomains() {
 
                 <div className="grid grid-cols-4 gap-4 max-[1100px]:grid-cols-2 max-[640px]:grid-cols-1">
                   <Metric icon={Globe2} label="Pages" value={hasCrawlEvidence ? activeDomain.totalPages : 'Not crawled'} muted={!hasCrawlEvidence} />
-                  <Metric icon={Mail} label="Emails" value={hasCrawlEvidence ? activeDomain.emails.length : 'Not crawled'} muted={!hasCrawlEvidence} />
-                  <Metric icon={Share2} label="Socials" value={hasCrawlEvidence ? countSocials(activeDomain) : 'Not crawled'} muted={!hasCrawlEvidence} />
+                  <Metric icon={Mail} label="Emails" value={hasCrawlEvidence ? countRawEmails(activeDomain) : 'Not crawled'} muted={!hasCrawlEvidence} />
+                  <Metric icon={Share2} label="Socials" value={hasCrawlEvidence ? countRawSocials(activeDomain) : 'Not crawled'} muted={!hasCrawlEvidence} />
                   <Metric icon={Network} label="DNS provider" value={activeDomain.dns?.mailProviderGuess || 'Unknown'} />
                 </div>
 
@@ -278,8 +279,8 @@ function DesktopDomains() {
                 <section className="rounded-lg border border-[#eaeae6] bg-[#f5f5f2] p-5">
                   <h3 className="text-xl font-extrabold">Technology stack</h3>
                   <div className="mt-4 flex flex-wrap gap-2">
-                    {(activeDomain.techStack || []).length === 0 ? <span className="rounded-full bg-white px-3 py-2 text-sm font-bold text-[#636360]">No technology signatures yet</span> : null}
-                    {(activeDomain.techStack || []).map((tech) => (
+                    {displayTechStack(activeDomain.techStack).length === 0 ? <span className="rounded-full bg-white px-3 py-2 text-sm font-bold text-[#636360]">No technology signatures yet</span> : null}
+                    {displayTechStack(activeDomain.techStack).map((tech) => (
                       <span className="rounded-full border border-[#eaeae6] bg-white px-3 py-2 text-sm font-extrabold text-brand-800" key={tech}>{tech}</span>
                     ))}
                   </div>
@@ -350,9 +351,9 @@ function buildKeyFindings(domain: DomainProfile) {
     return findings.slice(0, 4);
   }
 
-  if (domain.emails.length > 0) findings.push(`${domain.emails.length} contact signal${domain.emails.length === 1 ? '' : 's'} discovered and tied to crawl evidence.`);
-  if (countSocials(domain) > 0) findings.push(`Social footprint is visible across ${countSocials(domain)} profile${countSocials(domain) === 1 ? '' : 's'}.`);
-  if ((domain.techStack || []).length > 0) findings.push(`${domain.techStack?.slice(0, 3).join(', ')} detected in the public website stack.`);
+  if (countRawEmails(domain) > 0) findings.push(`${countRawEmails(domain)} email occurrence${countRawEmails(domain) === 1 ? '' : 's'} found across ${domain.emails.length} unique contact${domain.emails.length === 1 ? '' : 's'}.`);
+  if (countRawSocials(domain) > 0) findings.push(`Social footprint appears ${countRawSocials(domain)} time${countRawSocials(domain) === 1 ? '' : 's'} across ${countSocials(domain)} unique profile${countSocials(domain) === 1 ? '' : 's'}.`);
+  if (displayTechStack(domain.techStack).length > 0) findings.push(`${displayTechStack(domain.techStack).slice(0, 3).join(', ')} detected in the public website stack.`);
   if (hasKnownMailProvider(domain)) findings.push(`${domain.dns?.mailProviderGuess} appears to handle mail infrastructure.`);
   if (domain.whois?.creationDate) findings.push(`Domain has been registered since ${formatDate(domain.whois.creationDate)}.`);
   if (domain.avgScore >= 70) findings.push('High average intelligence score indicates dense, actionable page metadata.');
@@ -366,6 +367,14 @@ function hasDomainCrawlEvidence(domain: DomainProfile) {
 
 function countSocials(domain: DomainProfile) {
   return Object.values(domain.socials || {}).reduce((total, values) => total + new Set(values || []).size, 0);
+}
+
+function countRawEmails(domain: DomainProfile) {
+  return domain.counts?.rawEmailOccurrences ?? domain.emails.length;
+}
+
+function countRawSocials(domain: DomainProfile) {
+  return domain.counts?.rawSocialOccurrences ?? countSocials(domain);
 }
 
 function hasKnownMailProvider(domain: DomainProfile) {

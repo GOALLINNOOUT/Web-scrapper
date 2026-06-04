@@ -1,4 +1,5 @@
 import * as cheerio from 'cheerio';
+import type { CheerioAPI } from 'cheerio';
 
 const EMAIL_RE = /\b[A-Z0-9._%+-]{1,64}@[A-Z0-9.-]+\.[A-Z]{2,24}\b/gi;
 const MAILTO_RE = /mailto\s*:\s*([^"'<>\s]+)/gi;
@@ -19,9 +20,9 @@ const NON_EMAIL_TLDS = new Set([
 ]);
 const TELEMETRY_DOMAINS = ['ingest.sentry.io', 'sentry.io'];
 
-export function extractEmails(html: string) {
+export function extractEmails(html: string, $?: CheerioAPI) {
   const candidates = new Set<string>();
-  const searchable = buildSearchableText(html);
+  const searchable = buildSearchableText(html, $);
   let mailtoMatch: RegExpExecArray | null;
 
   while ((mailtoMatch = MAILTO_RE.exec(searchable)) !== null) {
@@ -40,12 +41,12 @@ export function extractEmails(html: string) {
     .sort();
 }
 
-function buildSearchableText(html: string) {
+function buildSearchableText(html: string, existingDom?: CheerioAPI) {
   const decoded = decodeTextVariants(html);
   const attributes: string[] = [];
 
   try {
-    const $ = cheerio.load(decoded);
+    const $ = existingDom || cheerio.load(decoded);
     $('a[href], [href], [title], [aria-label], [data-email], [content]').each((_index, element) => {
       for (const attribute of ['href', 'title', 'aria-label', 'data-email', 'content']) {
         const value = $(element).attr(attribute);

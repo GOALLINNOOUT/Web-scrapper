@@ -6,16 +6,16 @@ import { getRequestIdentity, toAxiosProxy } from './requestIdentity.js';
 
 const httpAgent = new http.Agent({
   keepAlive: true,
-  maxSockets: Number(process.env.HTTP_AGENT_MAX_SOCKETS || 200),
-  maxFreeSockets: 50,
+  maxSockets: Number(process.env.HTTP_AGENT_MAX_SOCKETS || 50),
+  maxFreeSockets: Number(process.env.HTTP_AGENT_MAX_FREE_SOCKETS || 10),
   timeout: 10_000,
   scheduling: 'fifo'
 });
 
 const httpsAgent = new https.Agent({
   keepAlive: true,
-  maxSockets: Number(process.env.HTTP_AGENT_MAX_SOCKETS || 200),
-  maxFreeSockets: 50,
+  maxSockets: Number(process.env.HTTP_AGENT_MAX_SOCKETS || 50),
+  maxFreeSockets: Number(process.env.HTTP_AGENT_MAX_FREE_SOCKETS || 10),
   timeout: 10_000,
   rejectUnauthorized: process.env.CRAWLER_REJECT_UNAUTHORIZED === 'true'
 });

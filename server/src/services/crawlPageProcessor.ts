@@ -18,12 +18,21 @@ import type { CrawlConfig } from '../types.js';
 import { createDailyEmailAlert } from './alertService.js';
 import { updateCrawlSummaryForPage } from './crawlSummaryService.js';
 import { invalidateCrawlReads, invalidateDomainReads } from './cacheInvalidation.js';
+import { recordFailureEvent } from './metricsCollector.js';
 import { reserveCrawlUrls } from './urlDeduplicator.js';
 import { waitForDomainTurn } from './domainThrottle.js';
 import { incrementMetric, observeHistogram } from '../utils/metrics.js';
 import { logger } from '../utils/logger.js';
-import { crawlPageJobId, crawlRefreshJobId } from '../queue/jobIds.js';
+import { config as appConfig } from '../config/index.js';
+import { crawlPageJobId } from '../queue/jobIds.js';
 import { publishLiveEvent } from './liveEvents.js';
+import { queueDomainProfileRefresh } from './domainProfileRefreshQueue.js';
+
+const MAX_STORED_LINKS = Number(process.env.CRAWLER_MAX_STORED_LINKS || 300);
+const MAX_STORED_EMAILS = Number(process.env.CRAWLER_MAX_STORED_EMAILS || 100);
+const MAX_STORED_SOCIAL_LINKS_PER_PLATFORM = Number(process.env.CRAWLER_MAX_STORED_SOCIAL_LINKS_PER_PLATFORM || 50);
+const MAX_SEARCH_LINKS = Number(process.env.CRAWLER_MAX_SEARCH_LINKS || 50);
+type ExtractedPage = Awaited<ReturnType<typeof runExtractorPipeline>>;
 
 export interface CrawlPageJobData {
   deviceId: string;
@@ -59,11 +68,11 @@ export async function processCrawlPage(data: CrawlPageJobData, queues?: QueueBun
 
   const config = job.config as unknown as CrawlConfig;
   if ((job.pagesCrawled || 0) >= config.maxPages) {
-    await completeCrawlIfNeeded(data.deviceId, data.crawlId, job.seedUrl);
+    await completeCrawlIfNeeded(data.deviceId, data.crawlId, job.seedUrl, 0, queues);
     return { skipped: true, reason: 'max_pages' };
   }
   if (data.depth > config.maxDepth) {
-    await maybeCompleteCrawl(data.deviceId, data.crawlId, queues, queueJobId);
+    await maybeCompleteCrawl(data.deviceId, data.crawlId, domainFromUrl(data.url), queues, queueJobId);
     return { skipped: true, reason: 'max_depth' };
   }
   if (await isPrivateUrl(data.url)) throw new Error(`SSRF_BLOCKED: ${data.url}`);
@@ -72,7 +81,7 @@ export async function processCrawlPage(data: CrawlPageJobData, queues?: QueueBun
   const breaker = getCircuitBreaker(domain);
   if (breaker.isOpen()) return { skipped: true, reason: 'circuit_open' };
   if (!(await isAllowedByRobots(data.url, config.respectRobots))) {
-    await maybeCompleteCrawl(data.deviceId, data.crawlId, queues, queueJobId);
+    await maybeCompleteCrawl(data.deviceId, data.crawlId, domain, queues, queueJobId);
     return { skipped: true, reason: 'robots_disallowed' };
   }
 
@@ -149,6 +158,7 @@ export async function processCrawlPage(data: CrawlPageJobData, queues?: QueueBun
       return { skipped: true, reason: 'max_pages_or_inactive' };
     }
 
+    const stored = compactExtractedForStorage(extracted);
     const parentPageId = toObjectIdOrNull(data.discoveredFrom);
     const page = await Page.findOneAndUpdate(
       { deviceId: data.deviceId, crawlId: data.crawlId, url: data.url },
@@ -163,15 +173,15 @@ export async function processCrawlPage(data: CrawlPageJobData, queues?: QueueBun
           parentUrl: data.parentUrl || null,
           parentPageId,
           discoveredFrom: data.parentUrl || null,
-          metadata: extracted.metadata,
-          links: extracted.links,
-          emails: extracted.emails,
-          social: extracted.social,
-          techStack: extracted.techStack,
-          content: encryptPageContent(extracted.content),
-          classification: extracted.classification,
+          metadata: stored.metadata,
+          links: stored.links,
+          emails: stored.emails,
+          social: stored.social,
+          techStack: stored.techStack,
+          content: encryptPageContent(stored.content),
+          classification: stored.classification,
           score: extracted.score,
-          searchText: buildSearchText(data.url, domain, extracted),
+          searchText: buildSearchText(data.url, domain, stored),
           crawledAt: new Date(),
           expiresAt: retentionDate(),
           contentHash: extracted.contentHash,
@@ -215,8 +225,9 @@ export async function processCrawlPage(data: CrawlPageJobData, queues?: QueueBun
         .slice(0, 100);
 
       const freshCandidates = await reserveCrawlUrls(data.crawlId, candidates);
-      const existing = await Page.find({ deviceId: data.deviceId, crawlId: data.crawlId, url: { $in: freshCandidates } }, { url: 1 }).lean();
-      const known = new Set(existing.map((item) => item.url));
+      const known = appConfig.redisUrl
+        ? new Set<string>()
+        : new Set((await Page.find({ deviceId: data.deviceId, crawlId: data.crawlId, url: { $in: freshCandidates } }, { url: 1 }).lean()).map((item) => item.url));
       const linkJobs = freshCandidates
         .filter((link) => !known.has(link))
         .map((link) => ({
@@ -246,7 +257,7 @@ export async function processCrawlPage(data: CrawlPageJobData, queues?: QueueBun
         }
       }
     }).catch(() => undefined);
-    await maybeCompleteCrawl(data.deviceId, data.crawlId, queues, queueJobId);
+    await maybeCompleteCrawl(data.deviceId, data.crawlId, domain, queues, queueJobId);
     incrementMetric('webintel_pages_crawled_total', 'Total pages processed by crawl workers', { status: 'crawled', page_type: extracted.classification.pageType });
     logger.info({ deviceId: data.deviceId, crawlId: data.crawlId, domain, url: data.url, queuedLinks: queues ? undefined : 0 }, 'Crawl page processed');
     return { success: true, url: data.url, score: extracted.score };
@@ -255,6 +266,15 @@ export async function processCrawlPage(data: CrawlPageJobData, queues?: QueueBun
     const message = error instanceof Error ? error.message : 'Unknown crawl page failure';
     incrementMetric('webintel_pages_crawled_total', 'Total pages processed by crawl workers', { status: 'failed', page_type: 'failed' });
     logger.warn({ deviceId: data.deviceId, crawlId: data.crawlId, domain, url: data.url, err: message }, 'Crawl page failed');
+    await recordFailureEvent({
+      jobId: queueJobId,
+      workerId: 'crawl-pages',
+      domain,
+      error: error instanceof Error ? error : new Error(message),
+      isTerminal: false,
+      url: data.url,
+      httpStatus: extractHttpStatus(error)
+    }).catch(() => undefined);
     await Page.findOneAndUpdate(
       { deviceId: data.deviceId, crawlId: data.crawlId, url: data.url },
       {
@@ -282,9 +302,20 @@ export async function processCrawlPage(data: CrawlPageJobData, queues?: QueueBun
       },
       { upsert: true, new: true }
     );
-    await maybeCompleteCrawl(data.deviceId, data.crawlId, queues, queueJobId);
+    await maybeCompleteCrawl(data.deviceId, data.crawlId, domain, queues, queueJobId);
     return { failed: true, url: data.url, error: message };
   }
+}
+
+function extractHttpStatus(error: unknown) {
+  const status = (error as { response?: { status?: unknown }; status?: unknown; statusCode?: unknown })?.response?.status
+    ?? (error as { status?: unknown })?.status
+    ?? (error as { statusCode?: unknown })?.statusCode;
+  const number = Number(status);
+  if (Number.isFinite(number)) return number;
+  const message = error instanceof Error ? error.message : String(error || '');
+  const match = message.match(/\b([45]\d{2})\b/);
+  return match ? Number(match[1]) : undefined;
 }
 
 function toObjectIdOrNull(value?: string | null) {
@@ -300,27 +331,23 @@ export function shouldRenderFallback(config: CrawlConfig, staticLinkCount: numbe
   );
 }
 
-async function maybeCompleteCrawl(deviceId: string, crawlId: string, queues?: QueueBundle, queueJobId = '') {
+async function maybeCompleteCrawl(deviceId: string, crawlId: string, domain: string, queues?: QueueBundle, queueJobId = '') {
   if (queues) {
-    await queues.domainEnrichment.add('refresh-domain-after-page', { deviceId, domain: undefined, crawlId }, {
-      delay: 10_000,
-      jobId: crawlRefreshJobId(crawlId),
-      attempts: 2
-    }).catch(() => undefined);
+    await queueDomainProfileRefresh(queues, { deviceId, domain, delayMs: 10_000 }).catch(() => undefined);
   }
 
   const job = await CrawlJob.findOne({ _id: crawlId, deviceId }).lean();
   if (!job) return;
   if (job.requestedStop || job.requestedPause || ['stopped', 'paused', 'failed'].includes(job.status)) return;
   if ((job.pagesCrawled || 0) >= (job.config as unknown as CrawlConfig).maxPages) {
-    await completeCrawlIfNeeded(deviceId, crawlId, job.seedUrl, job.pagesCrawled || 0);
+    await completeCrawlIfNeeded(deviceId, crawlId, job.seedUrl, job.pagesCrawled || 0, queues);
     return;
   }
 
   if (queues) {
     const hasRemaining = await hasRemainingCrawlPageJobs(queues, crawlId, queueJobId);
     if (!hasRemaining) {
-      await completeCrawlIfNeeded(deviceId, crawlId, job.seedUrl, job.pagesCrawled || 0);
+      await completeCrawlIfNeeded(deviceId, crawlId, job.seedUrl, job.pagesCrawled || 0, queues);
     }
   }
 }
@@ -337,7 +364,7 @@ async function hasRemainingCrawlPageJobs(queues: QueueBundle, crawlId: string, q
   return true;
 }
 
-async function completeCrawlIfNeeded(deviceId: string, crawlId: string, seedUrl: string, minimumPagesCrawled = 0) {
+async function completeCrawlIfNeeded(deviceId: string, crawlId: string, seedUrl: string, minimumPagesCrawled = 0, queues?: QueueBundle) {
   const completed = await CrawlJob.findOneAndUpdate(
     {
       _id: crawlId,
@@ -365,23 +392,48 @@ async function completeCrawlIfNeeded(deviceId: string, crawlId: string, seedUrl:
         }
       }
     }).catch(() => undefined);
-    await rebuildDomainProfile(deviceId, domainFromUrl(seedUrl)).catch(() => undefined);
-    await invalidateDomainReads(deviceId).catch(() => undefined);
+    const domain = domainFromUrl(seedUrl);
+    if (queues) {
+      await queueDomainProfileRefresh(queues, { deviceId, domain, delayMs: 1000 }).catch(() => undefined);
+    } else {
+      await rebuildDomainProfile(deviceId, domain).catch(() => undefined);
+      await invalidateDomainReads(deviceId).catch(() => undefined);
+    }
   }
 }
 
-function buildSearchText(url: string, domain: string, extracted: Awaited<ReturnType<typeof runExtractorPipeline>>) {
+function buildSearchText(url: string, domain: string, extracted: ExtractedPage) {
   return [
     url,
     domain,
     ...Object.values(extracted.metadata).filter(Boolean).map(String),
     ...extracted.emails,
-    ...extracted.links,
+    ...extracted.links.slice(0, MAX_SEARCH_LINKS),
     ...Object.values(extracted.social).flat(),
     ...extracted.techStack,
     shouldEncryptStoredPageText() ? '' : extracted.content.text,
     extracted.classification.pageType
-  ].join(' ');
+  ].join(' ').slice(0, 50_000);
+}
+
+function compactExtractedForStorage(extracted: ExtractedPage): ExtractedPage {
+  const social = Object.fromEntries(Object.entries(extracted.social).map(([platform, links]) => [
+    platform,
+    links.slice(0, MAX_STORED_SOCIAL_LINKS_PER_PLATFORM)
+  ])) as ExtractedPage['social'];
+
+  return {
+    ...extracted,
+    links: extracted.links.slice(0, MAX_STORED_LINKS),
+    emails: extracted.emails.slice(0, MAX_STORED_EMAILS),
+    social,
+    content: {
+      ...extracted.content,
+      headings: extracted.content.headings.slice(0, 30),
+      paragraphs: extracted.content.paragraphs.slice(0, 30),
+      text: extracted.content.text.slice(0, 8_000)
+    }
+  };
 }
 
 function toLivePage(page: { toObject?: () => Record<string, unknown> }) {

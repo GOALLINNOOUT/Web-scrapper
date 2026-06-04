@@ -24,7 +24,7 @@ export function ErrorState({ error, title, onRetry }: ErrorStateProps) {
       {onRetry ? (
         <button className="mobile-tap mt-4 inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-[var(--accent)] px-4 text-sm font-semibold text-white" type="button" onClick={onRetry}>
           <RefreshCw size={16} />
-          Retry
+          Try again
         </button>
       ) : null}
     </section>

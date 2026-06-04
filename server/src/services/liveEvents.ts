@@ -28,7 +28,14 @@ export function attachLiveWebSocketServer(server: HttpServer) {
   if (socketServerStarted) return;
   socketServerStarted = true;
 
-  const wss = new WebSocketServer({ server, path: '/events' });
+  const wss = new WebSocketServer({ noServer: true });
+  server.on('upgrade', (request, socket, head) => {
+    const url = new URL(request.url || '/', 'http://localhost');
+    if (url.pathname !== '/events') return;
+    wss.handleUpgrade(request, socket, head, (webSocket) => {
+      wss.emit('connection', webSocket, request);
+    });
+  });
   wss.on('connection', (socket, request) => {
     const url = new URL(request.url || '/events', 'http://localhost');
     const deviceId = String(url.searchParams.get('deviceId') || '').trim();

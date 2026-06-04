@@ -9,6 +9,7 @@ import { LoadingState } from '../components/LoadingState.jsx';
 import { RetryCrawlButton } from '../components/RetryCrawlButton.jsx';
 import { useLiveRefresh } from '../hooks/useLiveEvents.js';
 import { useMediaQuery } from '../hooks/useMediaQuery.js';
+import { displayTechStack } from '../lib/format.js';
 import { mergeLivePage, parseLiveCrawlJob, parseLiveCrawlJobSnapshot, parseLiveCrawlPage, patchJobList, upsertJobList } from '../lib/liveCrawl.js';
 import { normalizeSeedUrl } from '../lib/seedUrl.js';
 import { showToast } from '../toast.js';
@@ -226,7 +227,7 @@ function DesktopOverview() {
       </header>
 
       {isLoading ? <LoadingState title="Loading today's workspace" /> : null}
-      {!isLoading && loadError ? <ErrorState error={loadError} title="Could not load Overview" onRetry={() => { setIsLoading(true); return load(); }} /> : null}
+      {!isLoading && loadError ? <ErrorState error={loadError} title="Could not load overview" onRetry={() => { setIsLoading(true); return load(); }} /> : null}
 
       {!isLoading && !loadError ? (
         <>
@@ -412,8 +413,8 @@ function buildActivityFeed(jobs: CrawlJob[], pages: CrawlPage[]) {
     icon: page.emails.length ? Mail : page.techStack?.length ? Tags : Globe2,
     title: page.emails.length
       ? `${page.emails.length} email${page.emails.length === 1 ? '' : 's'} found on ${page.domain || 'page'}`
-      : page.techStack?.length
-        ? `${page.techStack.slice(0, 2).join(', ')} detected`
+      : displayTechStack(page.techStack).length
+        ? `${displayTechStack(page.techStack).slice(0, 2).join(', ')} detected`
         : `Page discovered: ${page.metadata?.title || page.domain || 'Untitled page'}`,
     detail: page.url,
     to: `/crawls/${page.crawlId}`,
@@ -439,7 +440,7 @@ function buildHighlights(pages: CrawlPage[]) {
       detail: [
         page.classification?.pageType ? `${page.classification.pageType} page` : null,
         page.emails.length ? `${page.emails.length} emails` : null,
-        page.techStack?.length ? `${page.techStack.slice(0, 3).join(', ')}` : null
+        displayTechStack(page.techStack).length ? `${displayTechStack(page.techStack).slice(0, 3).join(', ')}` : null
       ].filter(Boolean).join(' - ') || page.url
     }));
 }

@@ -65,7 +65,7 @@ async function request<T>(path: string, options: ApiRequestInit = {}): Promise<T
     .catch((error) => {
       if (error instanceof AppError) throw error;
       const appError = navigator.onLine
-        ? new AppError('Could not reach the server.', { kind: 'server', action: 'Check the server is running, then try again.' })
+        ? new AppError('Could not reach the server.', { kind: 'server', action: 'Make sure the app is connected, then try again.' })
         : new AppError('You are offline.', { kind: 'offline', action: 'Turn on Wi-Fi or mobile data, then try again.' });
       showToast({ title: toastTitleForError(appError), description: appError.action, tone: appError.kind === 'offline' ? 'warning' : 'error' });
       throw appError;
@@ -129,7 +129,7 @@ export const api = {
     body: JSON.stringify({ domain })
   }),
   enrichDomain: (domain: string) => request<DomainProfile>(`/domain/${encodeURIComponent(domain)}/enrich`, { method: 'POST' }),
-  getMonitoring: () => request<MonitoringSummary>('/monitoring'),
+  getMonitoring: () => request<MonitoringSummary>(`/monitoring?timeZone=${encodeURIComponent(Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC')}`),
   createMonitoringProfile: (payload: { domain: string; monitoringType: MonitoringProfile['monitoringType']; schedule?: MonitoringProfile['schedule']; sensitivity?: MonitoringProfile['sensitivity'] }) => request<{ profile: MonitoringProfile; discoveryCrawl: CrawlJob }>('/monitoring/profiles', {
     method: 'POST',
     body: JSON.stringify(payload)

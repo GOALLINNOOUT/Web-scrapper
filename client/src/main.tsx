@@ -14,6 +14,7 @@ import { NetworkStatusBanner } from './components/NetworkStatusBanner.jsx';
 import { RouteSeo } from './components/RouteSeo.jsx';
 import { useLiveEvents } from './hooks/useLiveEvents.js';
 import { applyTheme, getStoredTheme } from './theme.js';
+import { AdminApp } from './admin/AdminApp.jsx';
 import './styles.css';
 
 const root = document.getElementById('root') as RootElement | null;
@@ -33,6 +34,7 @@ function RootApp() {
       <ToastProvider />
       <NetworkStatusBanner />
       <Routes>
+        <Route path="/admin/*" element={<AdminApp />} />
         <Route element={<AppShell />}>
           <Route index element={<Overview />} />
           <Route path="/crawls" element={<Crawls />} />

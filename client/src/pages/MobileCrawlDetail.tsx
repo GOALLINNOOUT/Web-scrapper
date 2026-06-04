@@ -7,10 +7,10 @@ import { CrawlActionButtons } from '../components/CrawlActionButtons.jsx';
 import { CopyButton } from '../components/CopyButton.jsx';
 import { RetryCrawlButton } from '../components/RetryCrawlButton.jsx';
 import { useLiveRefresh } from '../hooks/useLiveEvents.js';
-import { formatRelativeTime, progressFor, toDomain } from '../lib/format.js';
+import { displayTechStack, formatRelativeTime, progressFor, toDomain } from '../lib/format.js';
 import { applyLiveJobPatch, mergeLivePage, parseLiveCrawlJob, parseLiveCrawlPage } from '../lib/liveCrawl.js';
 import { showToast } from '../toast.js';
-import type { CrawlJob, CrawlPage } from '../types.js';
+import type { CrawlJob, CrawlPage, CrawlSummary } from '../types.js';
 
 const PAGE_SIZE = 25;
 type SignalTab = 'emails' | 'social' | 'metadata';
@@ -23,6 +23,7 @@ export function MobileCrawlDetail() {
   const selectedPageId = new URLSearchParams(location.search).get('page');
   const [job, setJob] = useState<CrawlJob | null>(null);
   const [pages, setPages] = useState<CrawlPage[]>([]);
+  const [summary, setSummary] = useState<CrawlSummary | null>(null);
   const [selectedPage, setSelectedPage] = useState<CrawlPage | null>(routeState?.searchResult || null);
   const [isLoading, setIsLoading] = useState(true);
   const [nextCursor, setNextCursor] = useState<string | null>(null);
@@ -34,6 +35,7 @@ export function MobileCrawlDetail() {
     if (!id) return;
     let cancelled = false;
     setIsLoading(true);
+    setSummary(null);
     Promise.all([api.getCrawl(id), api.getCrawlResults(id, { limit: PAGE_SIZE })])
       .then(([crawlJob, results]) => {
         if (!cancelled) {
@@ -50,6 +52,11 @@ export function MobileCrawlDetail() {
       .finally(() => {
         if (!cancelled) setIsLoading(false);
       });
+    api.getCrawlSummary(id)
+      .then((crawlSummary) => {
+        if (!cancelled) setSummary(crawlSummary);
+      })
+      .catch(console.error);
     return () => {
       cancelled = true;
     };
@@ -93,10 +100,13 @@ export function MobileCrawlDetail() {
   }, [id]);
 
   const uniqueEmails = useMemo(() => new Set(pages.flatMap((page) => page.emails)).size, [pages]);
-  const tech = useMemo(() => [...new Set(pages.flatMap((page) => page.techStack || []))], [pages]);
-  const signalEmailData = useMemo(() => buildEmailEvidence(selectedPage ? [selectedPage] : pages), [pages, selectedPage]);
-  const signalSocialGroups = useMemo(() => buildSocialGroups(selectedPage ? [selectedPage] : pages), [pages, selectedPage]);
+  const tech = useMemo(() => displayTechStack(pages.flatMap((page) => page.techStack || [])), [pages]);
+  const signalEmailData = useMemo(() => summary ? buildEmailSummaryEvidence(summary) : buildEmailEvidence(pages), [pages, summary]);
+  const signalSocialGroups = useMemo(() => summary ? buildSocialSummaryGroups(summary) : buildSocialGroups(pages), [pages, summary]);
   const metadataRows = useMemo(() => selectedPage ? buildMetadataRows(selectedPage) : [], [selectedPage]);
+  const emailMetric = summary?.counts.uniqueEmails ?? (uniqueEmails || job?.emailsFound || 0);
+  const socialMetric = summary?.counts.uniqueSocialProfiles ?? (job?.socialLinksFound || 0);
+  const techMetric = summary?.counts.uniqueTech ?? tech.length;
 
   async function loadMore() {
     if (!id || !nextCursor) return;
@@ -132,6 +142,7 @@ export function MobileCrawlDetail() {
             <RetryCrawlButton job={job} compact onRetry={(nextJob) => {
               setJob(nextJob);
               setPages([]);
+              setSummary(null);
               setSelectedPage(null);
               setNextCursor(null);
             }} />
@@ -141,9 +152,9 @@ export function MobileCrawlDetail() {
 
       <div className="mt-4 grid grid-cols-2 gap-2">
         <Mini icon={Globe2} label="Pages" value={job.pagesCrawled} />
-        <Mini icon={Mail} label="Emails" value={uniqueEmails || job.emailsFound} />
-        <Mini icon={Share2} label="Socials" value={job.socialLinksFound} />
-        <Mini icon={Zap} label="Tech" value={tech.length} />
+        <Mini icon={Mail} label="Emails" value={emailMetric} />
+        <Mini icon={Share2} label="Socials" value={socialMetric} />
+        <Mini icon={Zap} label="Tech" value={techMetric} />
       </div>
 
       {tech.length ? <div className="no-scrollbar mt-4 flex gap-2 overflow-x-auto">{tech.map((item) => <span className="shrink-0 rounded-full bg-[var(--accent-light)] px-3 py-1.5 text-xs font-semibold text-[var(--accent)]" key={item}>{item}</span>)}</div> : null}
@@ -170,7 +181,7 @@ export function MobileCrawlDetail() {
         <div className="flex items-start justify-between gap-3">
           <div>
             <h2 className="text-base font-semibold text-[var(--text-primary)]">Signals</h2>
-            <p className="mt-1 text-xs text-[var(--text-secondary)]">{selectedPage ? 'Viewing selected page evidence.' : 'Viewing loaded crawl evidence. Select a page to inspect metadata.'}</p>
+            <p className="mt-1 text-xs text-[var(--text-secondary)]">Viewing crawl evidence. Select a page to inspect metadata.</p>
           </div>
         </div>
 
@@ -386,6 +397,18 @@ function buildEmailEvidence(sourcePages: CrawlPage[]): EmailEvidence {
   };
 }
 
+function buildEmailSummaryEvidence(summary: CrawlSummary): EmailEvidence {
+  const found = summary.emailOccurrences.map((item) => ({
+    value: item.value.toLowerCase(),
+    pageUrl: item.pageUrl
+  }));
+
+  return {
+    unique: summary.emails.length ? summary.emails.map((email) => email.toLowerCase()).sort() : [...new Set(found.map((item) => item.value))].sort(),
+    found
+  };
+}
+
 function buildSocialGroups(sourcePages: CrawlPage[]): SocialGroup[] {
   const groups = new Map<string, SocialOccurrence[]>();
   for (const page of sourcePages) {
@@ -405,6 +428,39 @@ function buildSocialGroups(sourcePages: CrawlPage[]): SocialGroup[] {
       found
     }))
     .filter((group) => group.found.length > 0)
+    .sort((a, b) => a.platform.localeCompare(b.platform));
+}
+
+function buildSocialSummaryGroups(summary: CrawlSummary): SocialGroup[] {
+  const occurrencesByPlatform = new Map<string, SocialOccurrence[]>();
+  for (const item of summary.socialOccurrences) {
+    const platform = String(item.platform);
+    const current = occurrencesByPlatform.get(platform) || [];
+    current.push({ value: String(item.value), pageUrl: item.pageUrl });
+    occurrencesByPlatform.set(platform, current);
+  }
+
+  const groupMap = new Map<string, SocialGroup>();
+  for (const group of summary.socials) {
+    const platform = String(group.platform);
+    groupMap.set(platform, {
+      platform,
+      unique: [...new Set((group.links || []).map(String))].sort(),
+      found: occurrencesByPlatform.get(platform) || []
+    });
+  }
+
+  for (const [platform, found] of occurrencesByPlatform.entries()) {
+    if (groupMap.has(platform)) continue;
+    groupMap.set(platform, {
+      platform,
+      unique: [...new Set(found.map((item) => item.value))].sort(),
+      found
+    });
+  }
+
+  return [...groupMap.values()]
+    .filter((group) => group.unique.length > 0 || group.found.length > 0)
     .sort((a, b) => a.platform.localeCompare(b.platform));
 }
 

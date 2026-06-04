@@ -37,6 +37,7 @@ const changeEventSchema = new mongoose.Schema({
 
 changeEventSchema.index({ deviceId: 1, detectedAt: -1 });
 changeEventSchema.index({ deviceId: 1, domain: 1, detectedAt: -1 });
+changeEventSchema.index({ deviceId: 1, readAt: 1, detectedAt: -1 });
 changeEventSchema.index({ workspaceId: 1, detectedAt: -1 });
 
 export const ChangeEvent = mongoose.model('ChangeEvent', changeEventSchema);

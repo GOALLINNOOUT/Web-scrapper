@@ -44,9 +44,9 @@ const SIGNATURES: Record<string, Signature> = {
     html: [/data-reactroot/i, /__reactFiber/i, /__REACT_DEVTOOLS_GLOBAL_HOOK__/i, /react-dom/i]
   },
   'Next.js': {
-    scripts: [/\/_next\/static\//i],
+    scripts: [/\/_next\/static\//i, /\/_next\/webpack-hmr/i],
     links: [/\/_next\/static\//i],
-    html: [/__NEXT_DATA__/i, /next-head-count/i]
+    html: [/__NEXT_DATA__/i, /next-head-count/i, /self\.__next_f/i, /__next_router__/i, /next-route-announcer/i]
   },
   'Nuxt.js': {
     scripts: [/\/_nuxt\//i],
@@ -67,9 +67,58 @@ const SIGNATURES: Record<string, Signature> = {
     scripts: [/\/@vite\/client/i, /\/src\/main\.[tj]sx?/i],
     html: [/type="module"[^>]+\/src\//i]
   },
+  Remix: {
+    scripts: [/\/build\/_assets\//i, /\/assets\/entry\.(client|server)-/i],
+    html: [/__remixContext/i, /__remixRouteModules/i]
+  },
+  Astro: {
+    scripts: [/\/_astro\//i],
+    links: [/\/_astro\//i],
+    html: [/astro-island/i, /data-astro-/i],
+    meta: [{ name: 'generator', content: /astro/i }]
+  },
+  SvelteKit: {
+    scripts: [/\/_app\/immutable\//i],
+    links: [/\/_app\/immutable\//i],
+    html: [/data-sveltekit-/i, /__SVELTEKIT/i]
+  },
   Gatsby: {
     scripts: [/webpack-runtime-/i, /app-[a-f0-9]+\.js/i],
     html: [/___gatsby/i, /gatsby-focus-wrapper/i]
+  },
+  'Create React App': {
+    html: [/react-scripts/i]
+  },
+  TailwindCSS: {
+    scripts: [/tailwindcss\.com/i],
+    links: [/tailwind(?:\.min)?\.css/i],
+    html: [/\b(?:sm|md|lg|xl|2xl):[a-z0-9-]+/i, /\b(?:bg|text|border|rounded|flex|grid)-[a-z0-9-[\]#/]+/i]
+  },
+  Bootstrap: {
+    scripts: [/bootstrap(?:\.bundle)?(?:\.min)?\.js/i],
+    links: [/bootstrap(?:\.min)?\.css/i],
+    html: [/\bcontainer-fluid\b/i, /\bnavbar-expand/i, /\bbtn-primary\b/i]
+  },
+  jQuery: {
+    scripts: [/jquery(?:-\d+\.\d+\.\d+)?(?:\.min)?\.js/i],
+    html: [/\bjQuery\b/i]
+  },
+  Laravel: {
+    cookies: [/laravel_session/i, /XSRF-TOKEN/i],
+    headers: [/^x-powered-by:.*laravel/i],
+    html: [/csrf-token/i]
+  },
+  Django: {
+    cookies: [/csrftoken/i, /django_language/i],
+    headers: [/^x-framework:.*django/i],
+    html: [/csrfmiddlewaretoken/i]
+  },
+  Rails: {
+    headers: [/^x-powered-by:.*rails/i],
+    html: [/csrf-param/i, /csrf-token/i]
+  },
+  Express: {
+    headers: [/^x-powered-by:.*express/i]
   },
   'Google Analytics': {
     scripts: [/google-analytics\.com\/analytics\.js/i, /googletagmanager\.com\/gtag/i],
@@ -105,6 +154,14 @@ const SIGNATURES: Record<string, Signature> = {
   },
   PayPal: {
     scripts: [/paypal\.com\/sdk\/js/i]
+  },
+  Firebase: {
+    scripts: [/www\.gstatic\.com\/firebasejs/i, /firebase-app(?:-compat)?\.js/i],
+    html: [/firebaseConfig/i]
+  },
+  Supabase: {
+    scripts: [/supabase(?:\.min)?\.js/i],
+    html: [/supabaseUrl/i, /supabase\.co/i]
   },
   Cloudflare: {
     headers: [/^cf-ray$/i, /^cf-cache-status$/i, /^server: cloudflare$/i],

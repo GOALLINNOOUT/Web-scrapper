@@ -19,26 +19,87 @@ import {
 import { invalidateWorkspaceReads } from '../services/cacheInvalidation.js';
 import { decryptChangeEvent } from '../services/changePayloadCrypto.js';
 import { getWorkspaceSettings } from '../services/workspaceSettingsService.js';
+import { timeMongoOperation } from '../utils/metrics.js';
+
+const MONITORING_PROFILE_PROJECTION = {
+  deviceId: 1,
+  domain: 1,
+  seedUrl: 1,
+  monitoringType: 1,
+  monitoredPages: 1,
+  recommendedPages: 1,
+  schedule: 1,
+  sensitivity: 1,
+  enabled: 1,
+  lastCheckedAt: 1,
+  lastChangeAt: 1,
+  discoveryCrawlId: 1,
+  createdAt: 1,
+  updatedAt: 1
+};
+
+const CHANGE_EVENT_PROJECTION = {
+  deviceId: 1,
+  domain: 1,
+  url: 1,
+  eventType: 1,
+  oldValue: 1,
+  newValue: 1,
+  diff: 1,
+  severity: 1,
+  reason: 1,
+  crawlId: 1,
+  readAt: 1,
+  detectedAt: 1
+};
+
+const ALERT_EVENT_PROJECTION = {
+  deviceId: 1,
+  type: 1,
+  severity: 1,
+  domain: 1,
+  crawlId: 1,
+  pageUrl: 1,
+  message: 1,
+  metadata: 1,
+  readAt: 1,
+  createdAt: 1
+};
+
+const DOMAIN_PROFILE_COMPACT_PROJECTION = {
+  domain: 1,
+  totalPages: 1,
+  counts: 1,
+  avgScore: 1,
+  lastCrawledAt: 1,
+  emails: 1,
+  socials: 1,
+  techStack: 1,
+  dns: 1,
+  whois: 1
+};
 
 export function monitoringRouter({ crawlManager }: { crawlManager: CrawlManager }) {
   const router = Router();
 
   router.get('/', async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const payload = await withCache(`monitoring:${req.deviceId}`, config.cacheTtlMonitoringMs, async () => {
+      const timeZone = sanitizeTimeZone(req.query.timeZone);
+      const payload = await withCache(`monitoring:${req.deviceId}:${timeZone}`, config.cacheTtlMonitoringMs, async () => {
         const since = new Date(Date.now() - 24 * 60 * 60 * 1000);
         const [activeCrawls, recentAlerts, domains, failedCrawls, profiles, events, suggestedPages] = await Promise.all([
-          CrawlJob.find({ deviceId: req.deviceId, status: { $in: ['queued', 'running', 'paused'] } }).sort({ createdAt: -1 }).limit(25).lean(),
-          AlertEvent.find({ deviceId: req.deviceId }).sort({ createdAt: -1 }).limit(100).lean(),
-          DomainProfile.find({ deviceId: req.deviceId }).sort({ lastCrawledAt: -1 }).limit(25).lean(),
-          CrawlJob.countDocuments({ deviceId: req.deviceId, status: 'failed', updatedAt: { $gte: since } }),
-          MonitoringProfile.find({ deviceId: req.deviceId }).sort({ updatedAt: -1 }).limit(100).lean(),
-          ChangeEvent.find({ deviceId: req.deviceId }).sort({ detectedAt: -1 }).limit(100).lean(),
+          timeMongoOperation('monitoring.activeCrawls', 'crawljobs', () => CrawlJob.find({ deviceId: req.deviceId, status: { $in: ['queued', 'running', 'paused'] } }, { deviceId: 1, seedUrl: 1, status: 1, config: 1, pagesCrawled: 1, emailsFound: 1, socialLinksFound: 1, requestedPause: 1, requestedStop: 1, error: 1, createdAt: 1, updatedAt: 1 }).sort({ createdAt: -1 }).limit(25).lean()),
+          timeMongoOperation('monitoring.alerts', 'alertevents', () => AlertEvent.find({ deviceId: req.deviceId }, ALERT_EVENT_PROJECTION).sort({ createdAt: -1 }).limit(100).lean()),
+          timeMongoOperation('monitoring.domains', 'domainprofiles', () => DomainProfile.find({ deviceId: req.deviceId }, DOMAIN_PROFILE_COMPACT_PROJECTION).sort({ lastCrawledAt: -1 }).limit(25).lean()),
+          timeMongoOperation('monitoring.failedCrawls', 'crawljobs', () => CrawlJob.countDocuments({ deviceId: req.deviceId, status: 'failed', updatedAt: { $gte: since } })),
+          timeMongoOperation('monitoring.profiles', 'monitoringprofiles', () => MonitoringProfile.find({ deviceId: req.deviceId }, MONITORING_PROFILE_PROJECTION).sort({ updatedAt: -1 }).limit(100).lean()),
+          timeMongoOperation('monitoring.events', 'changeevents', () => ChangeEvent.find({ deviceId: req.deviceId }, CHANGE_EVENT_PROJECTION).sort({ detectedAt: -1 }).limit(100).lean()),
           getWorkspaceMonitoringSuggestions(req.deviceId, 15)
         ]);
 
-        const decryptedEvents = events.map((event) => decryptChangeEvent(event));
+        const decryptedEvents = events.map((event) => decryptChangeEvent(event)).filter((event) => isMonitoredEvent(event, profiles));
         const unreadEvents = decryptedEvents.filter((event) => !event.readAt);
+        const todayKey = toLocalDateKey(new Date(), timeZone);
         return {
           activeCrawls,
           recentAlerts: dedupeAlerts(recentAlerts).slice(0, 25),
@@ -47,7 +108,7 @@ export function monitoringRouter({ crawlManager }: { crawlManager: CrawlManager 
           suggestedPages,
           changeFeed: decryptedEvents,
           counts: {
-            changesToday: decryptedEvents.filter((event) => new Date(event.detectedAt).getTime() >= since.getTime()).length,
+            changesToday: decryptedEvents.filter((event) => toLocalDateKey(new Date(event.detectedAt), timeZone) === todayKey).length,
             newPages: decryptedEvents.filter((event) => event.eventType === 'new_page').length,
             newEmails: decryptedEvents.filter((event) => event.eventType === 'new_email').length,
             dnsChanges: decryptedEvents.filter((event) => event.eventType === 'dns_changed').length,
@@ -115,17 +176,18 @@ export function monitoringRouter({ crawlManager }: { crawlManager: CrawlManager 
   router.get('/profiles/:domain', async (req: Request, res: Response, next: NextFunction) => {
     try {
       const domain = String(req.params.domain || '').toLowerCase();
-      const existingProfile = await MonitoringProfile.findOne({ deviceId: req.deviceId, domain }).lean();
+      const existingProfile = await timeMongoOperation('profile.detail', 'monitoringprofiles', () => MonitoringProfile.findOne({ deviceId: req.deviceId, domain }, MONITORING_PROFILE_PROJECTION).lean());
       const shouldRefresh = existingProfile && (existingProfile.monitoredPages || []).length === 0 && (existingProfile.recommendedPages || []).length === 0;
       const profile = shouldRefresh
         ? await refreshRecommendedPages(req.deviceId, domain)
         : existingProfile;
       if (!profile) return res.status(404).json({ message: 'Monitoring profile not found' });
       const [events, domainProfile] = await Promise.all([
-        ChangeEvent.find({ deviceId: req.deviceId, domain }).sort({ detectedAt: -1 }).limit(100).lean(),
-        DomainProfile.findOne({ deviceId: req.deviceId, domain }).lean()
+        timeMongoOperation('profile.events', 'changeevents', () => ChangeEvent.find({ deviceId: req.deviceId, domain }, CHANGE_EVENT_PROJECTION).sort({ detectedAt: -1 }).limit(100).lean()),
+        timeMongoOperation('profile.domain', 'domainprofiles', () => DomainProfile.findOne({ deviceId: req.deviceId, domain }, DOMAIN_PROFILE_COMPACT_PROJECTION).lean())
       ]);
-      res.json({ profile, events: events.map((event) => decryptChangeEvent(event)), domain: domainProfile });
+      const filteredEvents = events.map((event) => decryptChangeEvent(event)).filter((event) => isMonitoredEvent(event, profile ? [profile] : []));
+      res.json({ profile, events: filteredEvents, domain: domainProfile });
     } catch (error) {
       next(error);
     }
@@ -182,10 +244,10 @@ export function alertsRouter() {
 
   router.get('/', async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const alerts = await AlertEvent.find({ deviceId: req.deviceId })
+      const alerts = await timeMongoOperation('alerts.list', 'alertevents', () => AlertEvent.find({ deviceId: req.deviceId }, ALERT_EVENT_PROJECTION)
         .sort({ createdAt: -1 })
         .limit(Math.min(Number(req.query.limit || 25), 100) * 4)
-        .lean();
+        .lean());
       res.json({ items: dedupeAlerts(alerts).slice(0, Math.min(Number(req.query.limit || 25), 100)) });
     } catch (error) {
       next(error);
@@ -237,9 +299,55 @@ function extractSocialValues(metadata: Record<string, unknown>) {
   });
 }
 
-function toLocalDateKey(date: Date) {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, '0');
-  const day = String(date.getDate()).padStart(2, '0');
+function toLocalDateKey(date: Date, timeZone = 'UTC') {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit'
+  }).formatToParts(date);
+  const year = parts.find((part) => part.type === 'year')?.value || String(date.getUTCFullYear());
+  const month = parts.find((part) => part.type === 'month')?.value || String(date.getUTCMonth() + 1).padStart(2, '0');
+  const day = parts.find((part) => part.type === 'day')?.value || String(date.getUTCDate()).padStart(2, '0');
   return `${year}-${month}-${day}`;
+}
+
+function sanitizeTimeZone(value: unknown) {
+  const candidate = typeof value === 'string' && value.trim() ? value.trim() : 'UTC';
+  try {
+    new Intl.DateTimeFormat('en-US', { timeZone: candidate }).format(new Date());
+    return candidate;
+  } catch {
+    return 'UTC';
+  }
+}
+
+function isMonitoredEvent(
+  event: { domain?: string; url?: string },
+  profiles: Array<{ domain?: string; seedUrl?: string; enabled?: boolean; monitoredPages?: Array<{ url?: string; enabled?: boolean }> }>
+) {
+  const eventDomain = String(event.domain || '').toLowerCase().replace(/^www\./, '');
+  const eventUrl = normalizeUrlForCompare(event.url || '');
+  if (!eventDomain || !eventUrl) return false;
+
+  return profiles.some((profile) => {
+    if (profile.enabled === false) return false;
+    const profileDomain = String(profile.domain || '').toLowerCase().replace(/^www\./, '');
+    if (profileDomain !== eventDomain) return false;
+
+    const pages = (profile.monitoredPages || []).filter((page) => page.enabled !== false);
+    if (pages.length === 0) return eventUrl === normalizeUrlForCompare(profile.seedUrl || '');
+    return pages.some((page) => eventUrl === normalizeUrlForCompare(page.url || ''));
+  });
+}
+
+function normalizeUrlForCompare(value: string) {
+  try {
+    const parsed = new URL(value);
+    parsed.hash = '';
+    if (parsed.pathname.length > 1) parsed.pathname = parsed.pathname.replace(/\/+$/, '');
+    return parsed.toString();
+  } catch {
+    return value;
+  }
 }

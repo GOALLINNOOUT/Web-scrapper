@@ -13,7 +13,7 @@ export async function runExtractorPipeline(html: string, url: string, headers: R
   const $ = cheerio.load(html || '');
   const links = extractLinks($, url, { includeMetaLinks: options.includeMetaLinks ?? true });
   const [emails, metadata, content, techStack] = await Promise.all([
-    Promise.resolve(extractEmails(html || '')),
+    Promise.resolve(extractEmails(html || '', $)),
     Promise.resolve(extractMetadata($, url)),
     Promise.resolve(extractContent($)),
     Promise.resolve(detectTechStack($, headers, html || ''))

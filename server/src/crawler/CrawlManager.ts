@@ -28,6 +28,7 @@ import { invalidateCrawlReads, invalidateDomainReads, invalidateWorkspaceReads }
 import { publishLiveEvent } from '../services/liveEvents.js';
 import { getWorkspaceSettings } from '../services/workspaceSettingsService.js';
 import { decryptPageDocument, encryptPageContent, shouldEncryptStoredPageText } from '../services/changePayloadCrypto.js';
+import { queueDomainProfileRefresh } from '../services/domainProfileRefreshQueue.js';
 
 function sevenDaysFromNow() {
   return new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
@@ -354,8 +355,12 @@ export class CrawlManager {
       if (!state.stop) {
         const domain = domainFromUrl(config.seedUrl);
         await rebuildCrawlSummary(deviceId, id).catch(() => undefined);
-        await rebuildDomainProfile(deviceId, domain).catch(() => undefined);
-        await invalidateDomainReads(deviceId).catch(() => undefined);
+        if (this.queues) {
+          await queueDomainProfileRefresh(this.queues, { deviceId, domain, delayMs: 1000 }).catch(() => undefined);
+        } else {
+          await rebuildDomainProfile(deviceId, domain).catch(() => undefined);
+          await invalidateDomainReads(deviceId).catch(() => undefined);
+        }
         await AlertEvent.create({
           deviceId,
           type: 'new_domain',
@@ -364,14 +369,7 @@ export class CrawlManager {
           message: `Domain profile updated for ${domain}`
         }).catch(() => undefined);
 
-        if (this.queues) {
-          await this.queues.domainEnrichment.add('enrich-domain', { deviceId, domain }, {
-          attempts: 3,
-          backoff: { type: 'exponential', delay: 5000 },
-          removeOnComplete: 100,
-          removeOnFail: 200
-          });
-        } else {
+        if (!this.queues) {
           await enrichDomain(deviceId, domain).catch(() => undefined);
         }
       }

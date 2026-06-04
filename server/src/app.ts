@@ -8,6 +8,7 @@ import { domainRouter } from './routes/domainRoutes.js';
 import { alertsRouter, monitoringRouter } from './routes/monitoringRoutes.js';
 import { settingsRouter } from './routes/settingsRoutes.js';
 import { liveRouter } from './routes/liveRoutes.js';
+import { adminMetricsRouter } from './routes/adminMetricsRoutes.js';
 import { deviceScope } from './middleware/deviceScope.js';
 import type { CrawlManager } from './crawler/CrawlManager.js';
 import { rateLimiter } from './middleware/rateLimiter.js';
@@ -61,6 +62,7 @@ export function createApp({ crawlManager }: CreateAppOptions) {
   app.get('/metrics', (_req, res) => {
     res.type('text/plain; version=0.0.4; charset=utf-8').send(renderMetrics());
   });
+  app.use('/admin/metrics', adminMetricsRouter());
 
   app.use(deviceScope);
   app.use(rateLimiter);

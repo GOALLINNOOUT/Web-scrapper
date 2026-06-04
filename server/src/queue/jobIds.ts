@@ -8,6 +8,10 @@ export function crawlRefreshJobId(crawlId: string) {
   return safeJobId('refresh', crawlId);
 }
 
+export function domainRefreshJobId(deviceId: string, domain: string) {
+  return safeJobId('domain-refresh', deviceId, stableHash(domain.toLowerCase().replace(/^www\./, '')));
+}
+
 function safeJobId(...parts: string[]) {
   return parts.map((part) => part.replace(/[^a-zA-Z0-9_-]/g, '_')).join('_');
 }

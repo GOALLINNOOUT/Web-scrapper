@@ -124,7 +124,7 @@ export function MobileOverview() {
 
   return (
     <div className="mobile-page-enter pb-[112px]">
-      {!isLoading && loadError ? <div className="px-5 pt-4"><ErrorState error={loadError} title="Could not load Overview" onRetry={() => { setIsLoading(true); return load(); }} /></div> : null}
+      {!isLoading && loadError ? <div className="px-5 pt-4"><ErrorState error={loadError} title="Could not load overview" onRetry={() => { setIsLoading(true); return load(); }} /></div> : null}
       {!loadError ? (
       <>
       <section aria-labelledby="metrics-heading">

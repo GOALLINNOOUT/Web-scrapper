@@ -9,7 +9,7 @@ export function invalidateWorkspaceReads(deviceId: string) {
     `crawl:summary:${deviceId}:*`,
     `data:${deviceId}:*`,
     `domain:list:${deviceId}:*`,
-    `monitoring:${deviceId}`
+    `monitoring:${deviceId}*`
   ]);
 }
 
@@ -23,7 +23,7 @@ export function invalidateCrawlReads(deviceId: string, crawlId: string, options:
     `crawl:results:${deviceId}:${crawlId}:*`,
     `crawl:summary:${deviceId}:${crawlId}`,
     `data:${deviceId}:*`,
-    `monitoring:${deviceId}`
+    `monitoring:${deviceId}*`
   ]);
 }
 
@@ -31,6 +31,6 @@ export function invalidateDomainReads(deviceId: string) {
   publishLiveEvent({ type: 'domain.updated', deviceId }).catch(() => undefined);
   return invalidateCachePatterns([
     `domain:list:${deviceId}:*`,
-    `monitoring:${deviceId}`
+    `monitoring:${deviceId}*`
   ]);
 }

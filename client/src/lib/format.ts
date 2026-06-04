@@ -28,3 +28,9 @@ export function progressFor(job: { status: string; pagesCrawled: number; config:
   if (job.status === 'failed') return 0;
   return Math.min(100, Math.round((job.pagesCrawled / Math.max(1, job.config.maxPages)) * 100));
 }
+
+export function displayTechStack(values?: string[] | null) {
+  const unique = [...new Set((values || []).filter(Boolean))];
+  if (unique.includes('Next.js')) return unique.filter((value) => value !== 'React');
+  return unique;
+}

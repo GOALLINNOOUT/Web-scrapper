@@ -2,6 +2,7 @@ import type { Types } from 'mongoose';
 import { CrawlSummary } from '../models/CrawlSummary.js';
 import { Page } from '../models/Page.js';
 import { CrawlJob } from '../models/CrawlJob.js';
+import { timeMongoOperation } from '../utils/metrics.js';
 
 interface SummaryPageInput {
   deviceId: string;
@@ -23,7 +24,7 @@ export async function updateCrawlSummaryForPage(input: SummaryPageInput) {
     socialLinks.get(item.platform)?.add(item.value);
   }
 
-  const existing = await CrawlSummary.findOne({ deviceId: input.deviceId, crawlId: input.crawlId }).lean();
+  const existing = await timeMongoOperation('crawlSummary.pageExisting', 'crawlsummaries', () => CrawlSummary.findOne({ deviceId: input.deviceId, crawlId: input.crawlId }).lean());
   const groups = new Map<string, Set<string>>();
   for (const group of existing?.socials || []) {
     groups.set(String(group.platform), new Set((group.links || []).map(String)));
@@ -40,7 +41,7 @@ export async function updateCrawlSummaryForPage(input: SummaryPageInput) {
   const nextEmails = [...new Set([...(existing?.emails || []), ...emails])].sort();
   const nextTech = [...new Set([...(existing?.techStack || []), ...(input.techStack || [])])].sort();
 
-  await CrawlSummary.findOneAndUpdate(
+  await timeMongoOperation('crawlSummary.pageUpdate', 'crawlsummaries', () => CrawlSummary.findOneAndUpdate(
     { deviceId: input.deviceId, crawlId: input.crawlId },
     {
       $set: {
@@ -62,16 +63,16 @@ export async function updateCrawlSummaryForPage(input: SummaryPageInput) {
       }
     },
     { upsert: true, new: true }
-  );
+  ));
 }
 
 export async function rebuildCrawlSummary(deviceId: string, crawlId: string | Types.ObjectId) {
   const [job, pages] = await Promise.all([
-    CrawlJob.findOne({ _id: crawlId, deviceId }).lean(),
-    Page.find(
+    timeMongoOperation('crawlSummary.job', 'crawljobs', () => CrawlJob.findOne({ _id: crawlId, deviceId }).lean()),
+    timeMongoOperation('crawlSummary.pages', 'pages', () => Page.find(
       { deviceId, crawlId, status: 'crawled' },
       { url: 1, emails: 1, social: 1, techStack: 1 }
-    ).lean()
+    ).lean())
   ]);
 
   const emails = [...new Set(pages.flatMap((page) => page.emails || []).map((email) => email.toLowerCase()))].sort();
@@ -93,7 +94,7 @@ export async function rebuildCrawlSummary(deviceId: string, crawlId: string | Ty
     .sort((a, b) => a.platform.localeCompare(b.platform));
   const techStack = [...new Set(pages.flatMap((page) => page.techStack || []))].sort();
 
-  return CrawlSummary.findOneAndUpdate(
+  return timeMongoOperation('crawlSummary.rebuildUpdate', 'crawlsummaries', () => CrawlSummary.findOneAndUpdate(
     { deviceId, crawlId },
     {
       $set: {
@@ -115,5 +116,5 @@ export async function rebuildCrawlSummary(deviceId: string, crawlId: string | Ty
       }
     },
     { upsert: true, new: true }
-  ).lean();
+  ).lean());
 }

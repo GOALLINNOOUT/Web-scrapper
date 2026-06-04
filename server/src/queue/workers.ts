@@ -15,6 +15,7 @@ import { invalidateCrawlReads, invalidateDomainReads } from '../services/cacheIn
 import { reserveCrawlUrls } from '../services/urlDeduplicator.js';
 import { incrementMetric, setGauge } from '../utils/metrics.js';
 import { crawlPageJobId } from './jobIds.js';
+import { recordFailureEvent } from '../services/metricsCollector.js';
 
 export interface WorkerBundle {
   crawlWorker: Worker;
@@ -23,6 +24,12 @@ export interface WorkerBundle {
   domainWorker: Worker;
   close: () => Promise<void>;
 }
+
+const workerLockOptions = {
+  lockDuration: Number(process.env.BULLMQ_LOCK_DURATION_MS || 300_000),
+  stalledInterval: Number(process.env.BULLMQ_STALLED_INTERVAL_MS || 60_000),
+  maxStalledCount: Number(process.env.BULLMQ_MAX_STALLED_COUNT || 1)
+};
 
 export function startQueueWorkers(queues: QueueBundle): WorkerBundle {
   const connection = redisConnection() as never;
@@ -80,7 +87,8 @@ export function startQueueWorkers(queues: QueueBundle): WorkerBundle {
     },
     {
       connection,
-      concurrency: config.crawlJobWorkerConcurrency
+      concurrency: config.crawlJobWorkerConcurrency,
+      ...workerLockOptions
     }
   );
 
@@ -90,6 +98,7 @@ export function startQueueWorkers(queues: QueueBundle): WorkerBundle {
     {
       connection,
       concurrency: config.crawlPageWorkerConcurrency,
+      ...workerLockOptions,
       limiter: {
         max: config.crawlPageWorkerRate,
         duration: 1000
@@ -102,7 +111,8 @@ export function startQueueWorkers(queues: QueueBundle): WorkerBundle {
     async (job) => processMonitoringCheck(job.data, queues),
     {
       connection,
-      concurrency: config.monitoringChecksConcurrency
+      concurrency: config.monitoringChecksConcurrency,
+      ...workerLockOptions
     }
   );
 
@@ -124,17 +134,20 @@ export function startQueueWorkers(queues: QueueBundle): WorkerBundle {
     },
     {
       connection,
-      concurrency: config.domainEnrichmentConcurrency
+      concurrency: config.domainEnrichmentConcurrency,
+      ...workerLockOptions
     }
   );
 
   crawlWorker.on('failed', async (job, error) => {
     logger.error({ jobId: job?.id, err: error.message }, 'Crawl queue job failed');
     incrementMetric('webintel_queue_jobs_failed_total', 'Total failed BullMQ jobs', { queue: queueNames.crawlJobs });
+    await recordFailureEvent({ jobId: String(job?.id || ''), workerId: 'crawl-jobs', error, retryCount: job?.attemptsMade || 0, isTerminal: true }).catch(() => undefined);
   });
   crawlPageWorker.on('failed', async (job, error) => {
     logger.error({ jobId: job?.id, crawlId: job?.data?.crawlId, deviceId: job?.data?.deviceId, domain: safeDomain(job?.data?.url), err: error.message }, 'Crawl page job failed');
     incrementMetric('webintel_queue_jobs_failed_total', 'Total failed BullMQ jobs', { queue: queueNames.crawlPages });
+    await recordFailureEvent({ jobId: String(job?.id || ''), workerId: 'crawl-pages', error, retryCount: job?.attemptsMade || 0, isTerminal: true, url: String(job?.data?.url || '') }).catch(() => undefined);
     const crawlId = String(job?.data?.crawlId || '');
     if (crawlId) {
       await CrawlJob.updateOne({ _id: crawlId, pagesCrawled: 0 }, {
@@ -145,10 +158,12 @@ export function startQueueWorkers(queues: QueueBundle): WorkerBundle {
   monitoringWorker.on('failed', async (job, error) => {
     logger.error({ jobId: job?.id, profileId: job?.data?.profileId, deviceId: job?.data?.deviceId, err: error.message }, 'Monitoring check job failed');
     incrementMetric('webintel_queue_jobs_failed_total', 'Total failed BullMQ jobs', { queue: queueNames.monitoringChecks });
+    await recordFailureEvent({ jobId: String(job?.id || ''), workerId: 'monitoring-checks', error, retryCount: job?.attemptsMade || 0, isTerminal: true }).catch(() => undefined);
   });
   domainWorker.on('failed', async (job, error) => {
     logger.error({ jobId: job?.id, err: error.message }, 'Domain enrichment job failed');
     incrementMetric('webintel_queue_jobs_failed_total', 'Total failed BullMQ jobs', { queue: queueNames.domainEnrichment });
+    await recordFailureEvent({ jobId: String(job?.id || ''), workerId: 'domain-enrichment', domain: String(job?.data?.domain || ''), error, retryCount: job?.attemptsMade || 0, isTerminal: true }).catch(() => undefined);
   });
 
   const metricsTimer = setInterval(() => {

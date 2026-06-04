@@ -4,6 +4,7 @@ import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../api.js';
 import { ErrorState } from '../components/ErrorState.jsx';
+import { displayTechStack } from '../lib/format.js';
 import { normalizeSeedUrl } from '../lib/seedUrl.js';
 import { showToast } from '../toast.js';
 import type { CrawlConfig, DomainProfile } from '../types.js';
@@ -113,8 +114,8 @@ export function MobileDomains() {
               {(domain.avgScore || 0) > 0 ? <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-[var(--accent-light)] px-2 py-1 font-mono text-[11px] font-semibold text-[var(--accent)]">{domain.avgScore}<ChevronRight size={12} /></span> : <ChevronRight className="shrink-0 text-[var(--text-tertiary)]" size={17} />}
             </div>
             <div className="mt-3 flex flex-wrap items-center gap-2 text-[11px] font-semibold text-[var(--text-secondary)]">
-              <Mail size={13} /> {domain.emails.length}
-              <Share2 size={13} /> {countSocials(domain)}
+              <Mail size={13} /> {countRawEmails(domain)}
+              <Share2 size={13} /> {countRawSocials(domain)}
               <Network size={13} /> {domain.dns?.mailProviderGuess || 'DNS'}
               <ShieldCheck size={13} /> {domain.whois?.registrar || 'WHOIS'}
             </div>
@@ -159,8 +160,8 @@ function DomainDetailSheet({ domain, isEnriching, isStarting, onClose, onEnrich,
 
           <div className="mt-5 grid grid-cols-2 gap-2">
             <DetailMetric icon={Globe2} label="Pages" value={hasCrawl ? domain.totalPages : 'Not crawled'} />
-            <DetailMetric icon={Mail} label="Emails" value={hasCrawl ? domain.emails.length : 'Not crawled'} />
-            <DetailMetric icon={Share2} label="Socials" value={hasCrawl ? countSocials(domain) : 'Not crawled'} />
+            <DetailMetric icon={Mail} label="Emails" value={hasCrawl ? countRawEmails(domain) : 'Not crawled'} />
+            <DetailMetric icon={Share2} label="Socials" value={hasCrawl ? countRawSocials(domain) : 'Not crawled'} />
             <DetailMetric icon={Network} label="Mail" value={domain.dns?.mailProviderGuess || 'Unknown'} />
           </div>
 
@@ -196,7 +197,7 @@ function DomainDetailSheet({ domain, isEnriching, isStarting, onClose, onEnrich,
           <section className="mt-5">
             <h3 className="mb-2 text-[11px] font-semibold uppercase tracking-[0.07em] text-[var(--text-tertiary)]">Technology</h3>
             <div className="flex flex-wrap gap-2 rounded-2xl border border-[var(--border-subtle)] bg-[var(--bg-base)] p-4">
-              {(domain.techStack || []).length ? domain.techStack?.map((tech) => <span className="rounded-full bg-[var(--accent-light)] px-3 py-1.5 text-xs font-semibold text-[var(--accent)]" key={tech}>{tech}</span>) : <span className="text-sm text-[var(--text-secondary)]">No technology signatures yet. Start a crawl to collect page evidence.</span>}
+              {displayTechStack(domain.techStack).length ? displayTechStack(domain.techStack).map((tech) => <span className="rounded-full bg-[var(--accent-light)] px-3 py-1.5 text-xs font-semibold text-[var(--accent)]" key={tech}>{tech}</span>) : <span className="text-sm text-[var(--text-secondary)]">No technology signatures yet. Start a crawl to collect page evidence.</span>}
             </div>
           </section>
         </div>
@@ -228,6 +229,14 @@ function InfoSection({ title, rows }: { title: string; rows: Array<[string, stri
 
 function countSocials(domain: DomainProfile) {
   return Object.values(domain.socials || {}).reduce((total, values) => total + new Set(values || []).size, 0);
+}
+
+function countRawEmails(domain: DomainProfile) {
+  return domain.counts?.rawEmailOccurrences ?? domain.emails.length;
+}
+
+function countRawSocials(domain: DomainProfile) {
+  return domain.counts?.rawSocialOccurrences ?? countSocials(domain);
 }
 
 function domainSummary(domain: DomainProfile) {

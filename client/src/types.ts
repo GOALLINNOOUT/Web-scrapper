@@ -192,6 +192,13 @@ export interface DomainProfile {
   totalPages: number;
   emails: string[];
   socials: Partial<SocialLinks>;
+  counts?: {
+    rawEmailOccurrences?: number;
+    rawSocialOccurrences?: number;
+    uniqueEmails?: number;
+    uniqueSocialProfiles?: number;
+    uniquePages?: number;
+  };
   contentCategories?: Record<string, number>;
   avgScore: number;
   techStack?: string[];

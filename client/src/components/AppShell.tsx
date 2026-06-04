@@ -1,4 +1,4 @@
-import { Bell, ChevronLeft, Command, FileSearch, Globe2, ListTree, LoaderCircle, Plus, Radar, Search, X } from 'lucide-react';
+import { Bell, ChevronLeft, Command, FileSearch, Globe2, ListTree, LoaderCircle, Plus, Radar, Search, Settings, X } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
@@ -253,9 +253,14 @@ function MobileAppShell() {
             ) : null}
             <h1 className="truncate text-[26px] font-semibold leading-none tracking-[-0.03em]">{title}</h1>
           </div>
-          <button className="mobile-icon-btn" type="button" aria-label="Search workspace" onClick={() => setSearchOpen(true)}>
-            <Search size={18} />
-          </button>
+          <div className="flex items-center gap-2">
+            <button className="mobile-icon-btn" type="button" aria-label="Search workspace" onClick={() => setSearchOpen(true)}>
+              <Search size={18} />
+            </button>
+            <button className="mobile-icon-btn" type="button" aria-label="Open settings" onClick={() => navigate('/settings')}>
+              <Settings size={18} />
+            </button>
+          </div>
         </header>
         <Outlet />
       </main>

@@ -60,5 +60,6 @@ const crawlJobSchema = new mongoose.Schema({
 
 crawlJobSchema.index({ deviceId: 1, createdAt: -1 });
 crawlJobSchema.index({ deviceId: 1, status: 1, createdAt: -1 });
+crawlJobSchema.index({ deadLetterReason: 1 });
 
 export const CrawlJob = mongoose.model('CrawlJob', crawlJobSchema);

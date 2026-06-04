@@ -12,6 +12,8 @@ import { startQueueWorkers } from './queue/workers.js';
 import { config } from './config/index.js';
 import { logger } from './utils/logger.js';
 import { attachLiveWebSocketServer } from './services/liveEvents.js';
+import { attachAdminSocketServer } from './services/socketServer.js';
+import { startAdminMetricsCollector } from './services/metricsCollector.js';
 
 dotenv.config();
 
@@ -39,6 +41,8 @@ async function main() {
   const app = createApp({ crawlManager });
   const server = http.createServer(app);
   attachLiveWebSocketServer(server);
+  attachAdminSocketServer(server);
+  startAdminMetricsCollector(queues);
 
   server.listen(port, () => {
     logger.info({ port }, 'Crawler API listening');

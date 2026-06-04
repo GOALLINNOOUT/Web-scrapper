@@ -1,10 +1,26 @@
 import { Router } from 'express';
 import type { NextFunction, Request, Response } from 'express';
 import { DomainProfile } from '../models/DomainProfile.js';
-import { enrichDomain, rebuildDomainProfile } from '../intelligence/domain.service.js';
+import { enrichDomain, normalizeDomainName, rebuildDomainProfile } from '../intelligence/domain.service.js';
 import { domainFromUrl } from '../utils/url.js';
 import { config } from '../config/index.js';
 import { withCache } from '../utils/cache.js';
+import { timeMongoOperation } from '../utils/metrics.js';
+
+const DOMAIN_LIST_PROJECTION = {
+  domain: 1,
+  totalPages: 1,
+  emails: 1,
+  socials: 1,
+  counts: 1,
+  contentCategories: 1,
+  avgScore: 1,
+  techStack: 1,
+  lastCrawledAt: 1,
+  whois: 1,
+  dns: 1,
+  enrichmentRefreshedAt: 1
+};
 
 export function domainRouter() {
   const router = Router();
@@ -13,10 +29,10 @@ export function domainRouter() {
     try {
       const limit = Math.min(Number(req.query.limit || 25), 100);
       const profiles = await withCache(`domain:list:${req.deviceId}:${limit}`, config.cacheTtlDomainMs, () => (
-        DomainProfile.find({ deviceId: req.deviceId })
+        timeMongoOperation('list', 'domainprofiles', () => DomainProfile.find({ deviceId: req.deviceId }, DOMAIN_LIST_PROJECTION)
           .sort({ lastCrawledAt: -1, avgScore: -1 })
           .limit(limit)
-          .lean()
+          .lean())
       ));
       res.json({ items: profiles });
     } catch (error) {
@@ -27,7 +43,7 @@ export function domainRouter() {
   router.post('/lookup', async (req: Request, res: Response, next: NextFunction) => {
     try {
       const domain = normalizeDomainLookupInput(String(req.body?.domain || req.body?.url || ''));
-      const existing = await DomainProfile.findOne({ deviceId: req.deviceId, domain }).lean();
+      const existing = await timeMongoOperation('lookupExisting', 'domainprofiles', () => DomainProfile.findOne({ deviceId: req.deviceId, domain: { $in: domainAliases(domain) } }, DOMAIN_LIST_PROJECTION).lean());
       if (existing && !req.query.refresh) return res.json(existing);
 
       const profile = await enrichDomain(req.deviceId, domain, Boolean(req.query.refresh));
@@ -40,7 +56,7 @@ export function domainRouter() {
   router.get('/:domain', async (req: Request, res: Response, next: NextFunction) => {
     try {
       const domain = normalizeDomainParam(String(req.params.domain));
-      const profile = await DomainProfile.findOne({ deviceId: req.deviceId, domain }).lean();
+      const profile = await timeMongoOperation('detail', 'domainprofiles', () => DomainProfile.findOne({ deviceId: req.deviceId, domain: { $in: domainAliases(domain) } }, DOMAIN_LIST_PROJECTION).lean());
       if (!profile) return res.status(404).json({ error: 'NOT_FOUND', message: 'Domain profile not found' });
       res.json(profile);
     } catch (error) {
@@ -73,7 +89,7 @@ export function domainRouter() {
 
 function normalizeDomainParam(value: string) {
   const decoded = decodeURIComponent(value);
-  const domain = decoded.includes('://') ? domainFromUrl(decoded) : decoded.toLowerCase().replace(/^www\./, '');
+  const domain = normalizeDomainName(decoded.includes('://') ? domainFromUrl(decoded) : decoded);
   if (!domain) {
     const error = new Error('A valid domain is required');
     (error as Error & { status?: number }).status = 400;
@@ -97,9 +113,14 @@ function normalizeDomainLookupInput(value: string) {
   const path = parsed.pathname.replace(/\/+$/, '');
   if (path && path !== '/') return invalidDomain('Enter only a domain, not a page path.');
 
-  const hostname = parsed.hostname.replace(/^www\./, '');
+  const hostname = normalizeDomainName(parsed.hostname);
   if (!isValidDomain(hostname)) return invalidDomain();
   return hostname;
+}
+
+function domainAliases(domain: string) {
+  const canonical = normalizeDomainName(domain);
+  return canonical ? [canonical, `www.${canonical}`] : [];
 }
 
 function isValidDomain(domain: string) {

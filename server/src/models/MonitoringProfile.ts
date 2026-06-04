@@ -33,5 +33,6 @@ const monitoringProfileSchema = new mongoose.Schema({
 
 monitoringProfileSchema.index({ deviceId: 1, domain: 1 }, { unique: true });
 monitoringProfileSchema.index({ deviceId: 1, enabled: 1, lastCheckedAt: 1 });
+monitoringProfileSchema.index({ deviceId: 1, enabled: 1, domain: 1 });
 
 export const MonitoringProfile = mongoose.model('MonitoringProfile', monitoringProfileSchema);
