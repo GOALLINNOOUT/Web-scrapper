@@ -45,6 +45,11 @@ function formatUptime(value: unknown) {
   if (!Number.isFinite(seconds) || seconds <= 0) return 'n/a';
   const hours = Math.floor(seconds / 3600);
   const minutes = Math.floor((seconds % 3600) / 60);
+  if (hours >= 24) {
+    const days = Math.floor(hours / 24);
+    const remainingHours = hours % 24;
+    return `${days}d ${remainingHours}h ${minutes}m`;
+  }
   if (hours > 0) return `${hours}h ${minutes}m`;
   if (minutes > 0) return `${minutes}m`;
   return `${Math.floor(seconds)}s`;
