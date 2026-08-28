@@ -9,6 +9,7 @@ import { MetricSnapshot } from '../models/MetricSnapshot.js';
 import { QueueMetric } from '../models/QueueMetric.js';
 import { WorkerMetric } from '../models/WorkerMetric.js';
 import { getMongoOperationSnapshot } from '../utils/metrics.js';
+import { config } from '../config/index.js';
 
 type RangeKey = '15m' | '1h' | '6h' | '24h' | '7d' | '30d';
 type QueryValue = string | string[] | undefined;
@@ -65,12 +66,7 @@ export function adminMetricsRouter() {
       const range = parseRange(req);
       const [series, latest] = await Promise.all([
         workerClusterSeries(range),
-        WorkerMetric.aggregate([
-          { $sort: { timestamp: -1 } },
-          { $group: { _id: '$worker_id', doc: { $first: '$$ROOT' } } },
-          { $replaceRoot: { newRoot: '$doc' } },
-          { $sort: { worker_name: 1 } }
-        ])
+        latestWorkerMetrics()
       ]);
       send(res, { series, latest }, range, latest.length);
     } catch (error) {
@@ -92,8 +88,13 @@ export function adminMetricsRouter() {
     try {
       const range = parseRange(req);
       const data = await downsample(MetricSnapshot, range);
-      const latest = await MetricSnapshot.findOne().sort({ timestamp: -1 }).lean();
-      send(res, { latest, series: data }, range, data.length);
+      const [latestMetric, latestWorkers] = await Promise.all([
+        MetricSnapshot.findOne().sort({ timestamp: -1 }).lean(),
+        latestWorkerMetrics()
+      ]);
+      const latest = latestMetric ? enrichLatestWorkerSummary(latestMetric, latestWorkers) : latestMetric;
+      const serverInstances = await latestServerInstances();
+      send(res, { latest, series: data, server_instances: serverInstances }, range, data.length);
     } catch (error) {
       next(error);
     }
@@ -208,7 +209,7 @@ export function adminMetricsRouter() {
         projection('API CPU', data.map((item) => point(item.timestamp, item.api?.cpu || 0)), 90),
         projection('Worker CPU', data.map((item) => point(item.timestamp, item.workers?.avg_cpu || 0)), 90),
         projection('Redis Memory', data.map((item) => point(item.timestamp, item.redis?.maxmemory ? ((item.redis?.memory_used || 0) / item.redis.maxmemory) * 100 : 0)), 90),
-        projection('MongoDB Storage', data.map((item) => point(item.timestamp, item.mongodb?.storage_used_gb || 0)), 100),
+        projection('MongoDB Storage', data.map((item) => point(item.timestamp, item.mongodb?.storage_used_mb || 0)), config.mongodbStorageLimitMb),
         projection('Queue Backlog', await QueueMetric.find({ timestamp: { $gte: range.start, $lte: range.end } }).sort({ timestamp: 1 }).lean().then((items) => items.map((item) => point(item.timestamp, item.total_backlog))), 100_000)
       ];
       send(res, projections, range, projections.length);
@@ -305,12 +306,7 @@ async function getAdminMetricPayloadUncached(endpointWithQuery: string, inputQue
     const range = parseRangeQuery(query);
     const [series, latest] = await Promise.all([
       workerClusterSeries(range),
-      WorkerMetric.aggregate([
-        { $sort: { timestamp: -1 } },
-        { $group: { _id: '$worker_id', doc: { $first: '$$ROOT' } } },
-        { $replaceRoot: { newRoot: '$doc' } },
-        { $sort: { worker_name: 1 } }
-      ])
+      latestWorkerMetrics()
     ]);
     return payload({ series, latest }, range, latest.length);
   }
@@ -318,8 +314,13 @@ async function getAdminMetricPayloadUncached(endpointWithQuery: string, inputQue
   if (endpoint === 'infrastructure') {
     const range = parseRangeQuery(query);
     const data = await downsample(MetricSnapshot, range);
-    const latest = await MetricSnapshot.findOne().sort({ timestamp: -1 }).lean();
-    return payload({ latest, series: data }, range, data.length);
+    const [latestMetric, latestWorkers] = await Promise.all([
+      MetricSnapshot.findOne().sort({ timestamp: -1 }).lean(),
+      latestWorkerMetrics()
+    ]);
+    const latest = latestMetric ? enrichLatestWorkerSummary(latestMetric, latestWorkers) : latestMetric;
+    const serverInstances = await latestServerInstances();
+    return payload({ latest, series: data, server_instances: serverInstances }, range, data.length);
   }
 
   if (endpoint === 'mongo-operations') {
@@ -365,7 +366,7 @@ async function getAdminMetricPayloadUncached(endpointWithQuery: string, inputQue
       projection('API CPU', data.map((item) => point(item.timestamp, item.api?.cpu || 0)), 90),
       projection('Worker CPU', data.map((item) => point(item.timestamp, item.workers?.avg_cpu || 0)), 90),
       projection('Redis Memory', data.map((item) => point(item.timestamp, item.redis?.maxmemory ? ((item.redis?.memory_used || 0) / item.redis.maxmemory) * 100 : 0)), 90),
-      projection('MongoDB Storage', data.map((item) => point(item.timestamp, item.mongodb?.storage_used_gb || 0)), 100),
+      projection('MongoDB Storage', data.map((item) => point(item.timestamp, item.mongodb?.storage_used_mb || 0)), config.mongodbStorageLimitMb),
       projection('Queue Backlog', await QueueMetric.find({ timestamp: { $gte: range.start, $lte: range.end } }).sort({ timestamp: 1 }).lean().then((items) => items.map((item) => point(item.timestamp, item.total_backlog))), 100_000)
     ];
     return payload(projections, range, projections.length);
@@ -466,9 +467,10 @@ async function downsample(model: typeof MetricSnapshot | typeof QueueMetric | ty
   if (bucketMs <= 60_000) {
     return (model as any).find({ timestamp: { $gte: range.start, $lte: range.end } }).sort({ timestamp: 1 }).limit(1200).lean();
   }
-  const groupFields = fields || { doc: { $first: '$$ROOT' } };
+  const groupFields = fields || { doc: { $last: '$$ROOT' } };
   const rows = await (model as any).aggregate([
     { $match: { timestamp: { $gte: range.start, $lte: range.end } } },
+    { $sort: { timestamp: 1 } },
     {
       $group: {
         _id: bucketExpression(range),
@@ -553,6 +555,48 @@ async function domainMetrics(range: ReturnType<typeof parseRange>) {
     { $limit: 200 }
   ]);
   return data.map((item) => ({ domain: item._id, ...item, _id: undefined }));
+}
+
+export function summarizeWorkerStates(workers: Array<{ status?: string | null }> = []) {
+  const total = workers.length;
+  const active = workers.filter((worker) => worker.status === 'active' || worker.status === 'restarting').length;
+  const idle = workers.filter((worker) => worker.status === 'idle').length;
+  const crashed = workers.filter((worker) => worker.status === 'crashed').length;
+  return { total, active, idle, crashed };
+}
+
+async function latestServerInstances() {
+  const staleBefore = new Date(Date.now() - 30_000);
+  const rows = await MetricSnapshot.aggregate([
+    { $sort: { timestamp: -1 } },
+    { $group: { _id: { $ifNull: ['$instance_id', 'unknown'] }, doc: { $first: '$$ROOT' } } },
+    { $replaceRoot: { newRoot: '$doc' } },
+    { $sort: { instance_id: 1 } }
+  ]);
+  return rows.map((row) => ({
+    ...row,
+    status: row.timestamp && new Date(row.timestamp) >= staleBefore ? 'active' : 'stale'
+  }));
+}
+
+function latestWorkerMetrics() {
+  return WorkerMetric.aggregate([
+    { $sort: { timestamp: -1 } },
+    { $group: { _id: { $ifNull: ['$instance_id', '$worker_id'] }, doc: { $first: '$$ROOT' } } },
+    { $replaceRoot: { newRoot: '$doc' } },
+    { $sort: { worker_id: 1 } }
+  ]);
+}
+
+function enrichLatestWorkerSummary<T extends Record<string, unknown>>(latestMetric: T, latestWorkers: Array<{ status?: string | null }>) {
+  const summary = summarizeWorkerStates(latestWorkers);
+  return {
+    ...latestMetric,
+    workers: {
+      ...(latestMetric.workers as Record<string, unknown> | undefined),
+      ...summary
+    }
+  };
 }
 
 function point(timestamp: Date, value: number) {

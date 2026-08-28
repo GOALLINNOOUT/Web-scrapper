@@ -8,6 +8,8 @@ import { logger } from '../utils/logger.js';
 import { invalidateWorkspaceReads } from './cacheInvalidation.js';
 import { getWorkspaceSettings } from './workspaceSettingsService.js';
 import { isPrivateUrl } from '../middleware/ssrfProtection.js';
+import { redisConnection } from '../queue/connection.js';
+import { config as appConfig } from '../config/index.js';
 
 const scheduleDurationsMs = {
   '12h': 12 * 60 * 60 * 1000,
@@ -17,8 +19,15 @@ const scheduleDurationsMs = {
 } as const;
 
 type MonitoringSchedule = keyof typeof scheduleDurationsMs;
+type MonitoringProfileLean = {
+  _id: { toString(): string };
+  deviceId: string;
+  domain: string;
+  seedUrl: string;
+  monitoredPages?: Array<{ url: string; enabled?: boolean; lastCheckedAt?: Date | null }>;
+};
 
-export async function enqueueDueMonitoringChecks(queues: QueueBundle, now = new Date()) {
+export async function enqueueDueMonitoringChecks(queues?: QueueBundle, now = new Date()) {
   const oldestDue = new Date(now.getTime() - scheduleDurationsMs.monthly);
   const profiles = await MonitoringProfile.find({
     enabled: true,
@@ -36,25 +45,47 @@ export async function enqueueDueMonitoringChecks(queues: QueueBundle, now = new 
     const schedule = (profile.schedule || 'daily') as MonitoringSchedule;
     if (!isDue(profile.lastCheckedAt || null, schedule, now)) continue;
 
-    const slot = Math.floor(now.getTime() / scheduleDurationsMs[schedule]);
-    await queues.monitoringChecks.add(
-      'run-monitoring-check',
-      { profileId: profile._id.toString(), deviceId: profile.deviceId },
-      {
-        jobId: `monitoring:${profile._id.toString()}:${slot}`,
-        attempts: 2,
-        backoff: { type: 'exponential', delay: 5000 },
-        removeOnComplete: 500,
-        removeOnFail: 1000
-      }
-    ).then(() => {
-      queued += 1;
-    }).catch((error) => {
-      logger.warn({ profileId: profile._id.toString(), error: error.message }, 'Unable to enqueue monitoring check');
-    });
+    if (appConfig.redisUrl) {
+      const result = await enqueueRustMonitoringCrawls(profile).catch((error) => {
+        logger.warn({ profileId: profile._id.toString(), error: error.message }, 'Unable to enqueue Rust monitoring crawl');
+        return { queued: 0 };
+      });
+      queued += result.queued;
+    } else if (queues) {
+      const slot = Math.floor(now.getTime() / scheduleDurationsMs[schedule]);
+      await queues.monitoringChecks.add(
+        'run-monitoring-check',
+        { profileId: profile._id.toString(), deviceId: profile.deviceId },
+        {
+          jobId: `monitoring:${profile._id.toString()}:${slot}`,
+          attempts: 2,
+          backoff: { type: 'exponential', delay: 5000 },
+          removeOnComplete: 500,
+          removeOnFail: 1000
+        }
+      ).then(() => {
+        queued += 1;
+      }).catch((error) => {
+        logger.warn({ profileId: profile._id.toString(), error: error.message }, 'Unable to enqueue monitoring check');
+      });
+    }
   }
 
   return { scanned: profiles.length, queued };
+}
+
+export function startMonitoringScheduler(queues?: QueueBundle) {
+  const run = () => {
+    void enqueueDueMonitoringChecks(queues).then((result) => {
+      if (result.queued > 0) logger.info(result, 'Queued due monitoring checks');
+    }).catch((error) => {
+      logger.warn({ err: error.message }, 'Monitoring scheduler scan failed');
+    });
+  };
+  run();
+  const timer = setInterval(run, appConfig.monitoringSchedulerIntervalMs);
+  timer.unref();
+  return () => clearInterval(timer);
 }
 
 export async function processMonitoringCheck(data: { profileId?: string; deviceId?: string }, queues: QueueBundle) {
@@ -141,4 +172,67 @@ export async function processMonitoringCheck(data: { profileId?: string; deviceI
 function isDue(lastCheckedAt: Date | null, schedule: MonitoringSchedule, now: Date) {
   if (!lastCheckedAt) return true;
   return now.getTime() - new Date(lastCheckedAt).getTime() >= scheduleDurationsMs[schedule];
+}
+
+async function enqueueRustMonitoringCrawls(profile: MonitoringProfileLean) {
+  const pages = (profile.monitoredPages || [])
+    .filter((page) => page.enabled !== false)
+    .map((page) => page.url)
+    .filter(Boolean);
+  const urls = [...new Set(pages.length > 0 ? pages : [profile.seedUrl])];
+  if (urls.length === 0) return { queued: 0 };
+
+  const safetyChecks = await Promise.all(urls.map(async (url) => ({ url, blocked: await isPrivateUrl(url) })));
+  const safeUrls = safetyChecks.filter((check) => !check.blocked).map((check) => check.url);
+  const blockedUrls = safetyChecks.filter((check) => check.blocked).map((check) => check.url);
+  if (safeUrls.length === 0) {
+    await MonitoringProfile.updateOne(
+      { _id: profile._id, deviceId: profile.deviceId },
+      { $set: { enabled: false, lastCheckedAt: new Date() } }
+    );
+    await invalidateWorkspaceReads(profile.deviceId).catch(() => undefined);
+    logger.warn({ profileId: profile._id.toString(), domain: profile.domain, blockedUrls }, 'Disabled monitoring profile with unsafe targets');
+    return { queued: 0 };
+  }
+
+  const settings = await getWorkspaceSettings(profile.deviceId).catch(() => null);
+  const crawling = settings?.crawling as { respectRobots?: boolean } | undefined;
+  const redis = redisConnection();
+  let queued = 0;
+  for (const url of safeUrls) {
+    const crawl = await CrawlJob.create({
+      deviceId: profile.deviceId,
+      seedUrl: url,
+      config: withCrawlConfigDefaults({
+        seedUrl: url,
+        maxPages: 1,
+        maxDepth: 0,
+        sameDomainOnly: true,
+        respectRobots: crawling?.respectRobots || false,
+        concurrency: 1,
+        schedule: 'none',
+        discovery: {
+          sitemap: false,
+          renderJavaScript: false,
+          renderWhenStaticLinksBelow: 20,
+          includeMetaLinks: true
+        },
+        extract: { links: true, emails: true, metadata: true, social: true, content: true }
+      }),
+      status: 'queued',
+      startedAt: null,
+      expiresAt: retentionDate()
+    });
+    await redis.lpush('webscrapper:jobs', JSON.stringify({ crawlId: crawl._id.toString(), deviceId: profile.deviceId }));
+    queued += 1;
+  }
+
+  const checkedAt = new Date();
+  const update: Record<string, Date> = { lastCheckedAt: checkedAt };
+  if ((profile.monitoredPages || []).length > 0) update['monitoredPages.$[].lastCheckedAt'] = checkedAt;
+  await MonitoringProfile.updateOne({ _id: profile._id, deviceId: profile.deviceId }, { $set: update });
+  await invalidateWorkspaceReads(profile.deviceId).catch(() => undefined);
+
+  logger.info({ profileId: profile._id.toString(), queued, blockedUrls: blockedUrls.length }, 'Queued Rust monitoring crawls');
+  return { queued };
 }

@@ -3,7 +3,7 @@ import { AppError, appErrorFromResponse, toastTitleForError } from './lib/errors
 import { showToast } from './toast.js';
 import type { AlertEvent, ChangeEvent, CrawlConfig, CrawlJob, CrawlPage, CrawlSummary, CursorPage, DataFilters, DomainProfile, MetadataPreview, MonitoringProfile, MonitoringSummary, WorkspaceSettings } from './types.js';
 
-export const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:4000';
+export const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:8080';
 const DEFAULT_GET_CACHE_MS = 2500;
 
 interface ApiRequestInit extends RequestInit {

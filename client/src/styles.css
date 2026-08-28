@@ -443,7 +443,38 @@
   box-shadow: 0 0 12px rgba(16,185,129,0.4);
 }
 
+.admin-status-active {
+  border-color: rgba(16,185,129,0.28);
+  color: var(--accent-success);
+}
+
+.admin-status-active span {
+  background: var(--accent-success);
+  box-shadow: 0 0 14px rgba(16,185,129,0.58);
+}
+
+.admin-status-idle {
+  border-color: rgba(148,163,184,0.22);
+  color: var(--admin-text-secondary);
+}
+
+.admin-status-idle span {
+  background: var(--accent-info);
+  box-shadow: none;
+  opacity: 0.72;
+}
+
 .admin-status-warning span {
+  background: var(--accent-warning);
+  box-shadow: var(--glow-amber);
+}
+
+.admin-status-stale {
+  border-color: rgba(245,158,11,0.56);
+  color: color-mix(in srgb,var(--accent-warning)82%, white);
+}
+
+.admin-status-stale span {
   background: var(--accent-warning);
   box-shadow: var(--glow-amber);
 }
@@ -522,6 +553,10 @@
 .admin-health-warning .admin-health-dot {
   background: var(--accent-warning);
   box-shadow: var(--glow-amber);
+}
+
+.admin-health-healthy .admin-health-state {
+  color: color-mix(in srgb,var(--accent-success)70%, white);
 }
 
 .admin-health-offline .admin-health-dot {

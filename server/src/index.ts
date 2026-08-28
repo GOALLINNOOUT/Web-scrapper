@@ -8,12 +8,12 @@ import { createApp } from './app.js';
 import { connectDatabase } from './lib/db.js';
 import { CrawlManager } from './crawler/CrawlManager.js';
 import { createQueues } from './queue/queues.js';
-import { startQueueWorkers } from './queue/workers.js';
 import { config } from './config/index.js';
 import { logger } from './utils/logger.js';
 import { attachLiveWebSocketServer } from './services/liveEvents.js';
 import { attachAdminSocketServer } from './services/socketServer.js';
 import { startAdminMetricsCollector } from './services/metricsCollector.js';
+import { startMonitoringScheduler } from './services/monitoringSchedulerService.js';
 
 dotenv.config();
 
@@ -28,14 +28,7 @@ async function main() {
 
   const queues = config.redisUrl ? createQueues() : undefined;
   const crawlManager = new CrawlManager(queues);
-  const shouldStartLocalWorkers = queues && (
-    config.performanceMode === 'production'
-      ? process.env.START_WORKERS_IN_API === 'true'
-      : process.env.START_WORKERS_IN_API !== 'false'
-  );
-  if (shouldStartLocalWorkers) {
-    startQueueWorkers(queues);
-  } else if (!queues) {
+  if (!queues) {
     logger.warn('REDIS_URL is not set. Falling back to in-process crawling for local development.');
   }
   const app = createApp({ crawlManager });
@@ -43,6 +36,7 @@ async function main() {
   attachLiveWebSocketServer(server);
   attachAdminSocketServer(server);
   startAdminMetricsCollector(queues);
+  startMonitoringScheduler(queues);
 
   server.listen(port, () => {
     logger.info({ port }, 'Crawler API listening');

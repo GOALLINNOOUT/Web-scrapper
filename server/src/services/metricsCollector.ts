@@ -1,4 +1,5 @@
 import mongoose from 'mongoose';
+import os from 'node:os';
 import si from 'systeminformation';
 import type { Queue } from 'bullmq';
 import { CrawlJob } from '../models/CrawlJob.js';
@@ -123,6 +124,8 @@ async function collectSystemMetrics(queues?: QueueBundle) {
 
   const metric = await MetricSnapshot.create({
     timestamp,
+    instance_id: config.instanceId,
+    hostname: os.hostname(),
     interval: 10,
     api: {
       cpu,
@@ -152,10 +155,10 @@ async function collectSystemMetrics(queues?: QueueBundle) {
     mongodb: mongoStats,
     proxy_pool: proxyStats,
     system_totals: {
-      requests_per_sec: 0,
+      requests_per_sec: apiLatency.requests_per_sec,
       pages_per_sec: pagesPerSec,
       jobs_per_sec: jobsPerSec,
-      domains_per_sec: 0,
+      domains_per_sec: await recentDomainsPerSecond(),
       active_crawls: crawlStats.activeCrawls,
       queued_crawls: crawlStats.queuedCrawls,
       running_crawls: crawlStats.runningCrawls,
@@ -166,6 +169,7 @@ async function collectSystemMetrics(queues?: QueueBundle) {
 
   const queueDoc = await QueueMetric.create({ timestamp, ...queueMetric });
   emitAdminRoom('live:overview', 'metrics:live', { metric: metric.toObject(), queue: queueDoc.toObject() }, 'metrics:live');
+  emitAdminRoom('live:crawling', 'metrics:live', { queue: queueDoc.toObject() }, 'metrics:live');
 }
 
 async function collectWorkerMetrics(queues?: QueueBundle) {
@@ -180,10 +184,15 @@ async function collectWorkerMetrics(queues?: QueueBundle) {
     const counts = queue ? await queue.getJobCounts('active', 'completed', 'failed').catch(() => ({ active: 0, completed: 0, failed: 0 })) : { active: 0, completed: 0, failed: 0 };
     const completed = Number(counts.completed || 0);
     const failed = Number(counts.failed || 0);
+    const instanceWorkerId = `${config.instanceId}:${def.id}`;
     docs.push(await WorkerMetric.create({
       timestamp,
-      worker_id: def.id,
+      worker_id: instanceWorkerId,
       worker_name: def.name,
+      worker_type: 'node-bullmq',
+      instance_id: instanceWorkerId,
+      hostname: os.hostname(),
+      queue_name: def.queueName,
       status: Number(counts.active || 0) > 0 ? 'active' : 'idle',
       cpu_percent: cpu,
       memory_mb: memoryMb,
@@ -245,15 +254,17 @@ async function buildQueueMetric(queues?: QueueBundle) {
   const crawlQueueNames = [queueNames.crawlJobs, queueNames.crawlPagesHigh, queueNames.crawlPages, queueNames.crawlPagesLow];
   const pageQueueNames = [queueNames.crawlPagesHigh, queueNames.crawlPages, queueNames.crawlPagesLow];
   const retryQueueNames = [queueNames.monitoringChecks, queueNames.changeDetection, queueNames.domainEnrichment, queueNames.webhooks, queueNames.alerts];
-  const [crawl, pages, retry, runningCrawls, queuedCrawls, recentCrawlFailures, recentRetryFailures] = await Promise.all([
+  const [crawl, pages, retry, runningCrawls, queuedCrawls, recentCrawlFailures, recentRetryFailures, rustBacklog] = await Promise.all([
     aggregateQueueCounts(queues, crawlQueueNames),
     aggregateQueueCounts(queues, pageQueueNames),
     aggregateQueueCounts(queues, retryQueueNames),
     CrawlJob.countDocuments({ status: 'running' }),
     CrawlJob.countDocuments({ status: 'queued' }),
     recentFailureEvents(['crawl-jobs', 'crawl-pages'], 5 * 60_000),
-    recentFailureEvents(['monitoring-checks', 'domain-enrichment'], 5 * 60_000)
+    recentFailureEvents(['monitoring-checks', 'domain-enrichment'], 5 * 60_000),
+    rustQueueBacklog()
   ]);
+  crawl.waiting += rustBacklog;
   const retainedFailedCount = crawl.failed + retry.failed;
   crawl.failed = recentCrawlFailures;
   retry.failed = recentRetryFailures;
@@ -278,6 +289,11 @@ async function buildQueueMetric(queues?: QueueBundle) {
     backlog_growth_rate_per_min: round(growth),
     estimated_drain_time_minutes: round(totalBacklog / throughput / 60)
   };
+}
+
+async function rustQueueBacklog() {
+  if (!config.redisUrl) return 0;
+  return redisConnection().llen('webscrapper:jobs').catch(() => 0);
 }
 
 async function recentFailureEvents(workerIds: string[], windowMs: number) {
@@ -511,6 +527,12 @@ async function recentPagesPerSecond() {
   const since = new Date(Date.now() - 60_000);
   const count = await Page.countDocuments({ status: 'crawled', crawledAt: { $gte: since } });
   return round(count / 60);
+}
+
+async function recentDomainsPerSecond() {
+  const since = new Date(Date.now() - 60_000);
+  const domains = await Page.distinct('domain', { status: 'crawled', crawledAt: { $gte: since } });
+  return round(domains.length / 60);
 }
 
 function classifyFailure(message: string, status?: number) {

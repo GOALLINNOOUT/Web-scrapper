@@ -1,0 +1,17 @@
+.git
+.codex
+.agents
+node_modules
+client/node_modules
+server/node_modules
+target
+client/dist
+server/dist
+logs
+services
+nginx
+*.log
+npm-debug.log*
+.env
+.env.*
+!.env.example

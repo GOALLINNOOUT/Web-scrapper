@@ -1,6 +1,7 @@
 import crypto from 'node:crypto';
 import { config } from '../config/index.js';
 import { logger } from '../utils/logger.js';
+import { decompress } from 'fzstd';
 
 const algorithm = 'aes-256-gcm';
 const envelopeVersion = 1;
@@ -110,9 +111,22 @@ export function decryptPageContent<T extends { text?: string }>(content: T): T {
   return { ...content, text: decryptStoredPageText(content.text) };
 }
 
-export function decryptPageDocument<T extends { content?: { text?: string } }>(page: T): T {
-  if (!page.content) return page;
-  return { ...page, content: decryptPageContent(page.content) };
+export function decryptPageDocument<T extends { content?: { text?: string }; compressionAlgorithm?: string | null; compressedContent?: any }>(page: T): T {
+  let finalPage = { ...page };
+  if (finalPage.compressionAlgorithm === 'zstd' && finalPage.compressedContent) {
+    try {
+      const buffer = Buffer.isBuffer(finalPage.compressedContent)
+        ? finalPage.compressedContent
+        : (finalPage.compressedContent.buffer || Buffer.from(finalPage.compressedContent));
+      const decompressed = decompress(buffer);
+      const decompressedStr = Buffer.from(decompressed).toString('utf8');
+      finalPage.content = JSON.parse(decompressedStr);
+    } catch (error) {
+      logger.error({ err: error instanceof Error ? error.message : String(error) }, 'Failed to decompress page content');
+    }
+  }
+  if (!finalPage.content) return finalPage;
+  return { ...finalPage, content: decryptPageContent(finalPage.content) };
 }
 
 function isEncryptedEnvelope(value: unknown): value is EncryptedEnvelope {

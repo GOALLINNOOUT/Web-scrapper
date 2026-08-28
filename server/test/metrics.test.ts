@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { summarizeWorkerStates } from '../src/routes/adminMetricsRoutes.js';
 import { buildMongoStorageMetrics } from '../src/services/metricsCollector.js';
 
 const MB = 1024 * 1024;
@@ -26,4 +27,17 @@ test('builds zero Mongo storage metrics when db stats are unavailable', () => {
   assert.equal(metrics.storage_free_mb, 512);
   assert.equal(metrics.storage_used_percent, 0);
   assert.equal(metrics.logical_data_mb, 0);
+});
+
+test('summarizes worker states from the latest worker rows', () => {
+  const summary = summarizeWorkerStates([
+    { status: 'active' },
+    { status: 'active' },
+    { status: 'idle' },
+    { status: 'crashed' },
+    { status: 'restarting' },
+    {}
+  ]);
+
+  assert.deepEqual(summary, { total: 6, active: 3, idle: 1, crashed: 1 });
 });

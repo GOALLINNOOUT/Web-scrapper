@@ -12,6 +12,7 @@ import { timeMongoOperation } from '../utils/metrics.js';
 
 const COMPACT_PAGE_PROJECTION = {
   content: 0,
+  compressedContent: 0,
   searchText: 0
 };
 

@@ -9,6 +9,8 @@ const providerBreakdownSchema = new mongoose.Schema({
 const metricSnapshotSchema = new mongoose.Schema({
   // Indexed for time range scans and TTL expiry.
   timestamp: { type: Date, required: true, default: Date.now, index: { expires: '30d' } },
+  instance_id: { type: String, default: '' },
+  hostname: { type: String, default: '' },
   interval: { type: Number, default: 10 },
   api: {
     cpu: { type: Number, default: 0 },
@@ -82,5 +84,6 @@ const metricSnapshotSchema = new mongoose.Schema({
 }, { minimize: false });
 
 metricSnapshotSchema.index({ timestamp: -1 });
+metricSnapshotSchema.index({ instance_id: 1, timestamp: -1 });
 
 export const MetricSnapshot = mongoose.model('MetricSnapshot', metricSnapshotSchema);

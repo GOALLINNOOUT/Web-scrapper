@@ -32,6 +32,8 @@ export interface IPage {
   crawledAt: Date;
   contentHash: string;
   expiresAt: Date;
+  compressionAlgorithm?: string | null;
+  compressedContent?: Buffer | null;
 }
 
 const metadataSchema = new mongoose.Schema({
@@ -148,7 +150,9 @@ const pageSchema = new mongoose.Schema({
   searchText: { type: String, default: '' },
   crawledAt: { type: Date, default: Date.now },
   contentHash: { type: String, required: true },
-  expiresAt: { type: Date, default: sevenDaysFromNow, index: { expires: 0 } }
+  expiresAt: { type: Date, default: sevenDaysFromNow, index: { expires: 0 } },
+  compressionAlgorithm: { type: String, default: null },
+  compressedContent: { type: Buffer, default: null }
 });
 
 pageSchema.index({ deviceId: 1, crawlId: 1, url: 1 }, { unique: true });

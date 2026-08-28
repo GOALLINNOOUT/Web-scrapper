@@ -47,10 +47,10 @@ export function Overview() {
         ))}
       </section>}
       {overview.loading && !overview.data ? <SkeletonGrid count={4} /> : <section className="admin-grid-four">
-        <MetricCard title="Requests/sec" value={formatNumber(metric?.system_totals?.requests_per_sec)} unit="req/s" trend="stable" />
+        <MetricCard title="Observed Requests/sec" value={formatNumber(metric?.system_totals?.requests_per_sec)} unit="req/s" trend="stable" />
         <MetricCard title="Pages/sec" value={formatNumber(metric?.system_totals?.pages_per_sec)} unit="pages/s" trend="up" />
         <MetricCard title="Jobs/sec" value={formatNumber(metric?.system_totals?.jobs_per_sec)} unit="jobs/s" trend="stable" />
-        <MetricCard title="Domains/sec" value={formatNumber(metric?.system_totals?.domains_per_sec)} unit="domains/s" trend="stable" />
+        <MetricCard title="New Domains/sec" value={formatNumber(metric?.system_totals?.domains_per_sec)} unit="domains/s" trend="stable" />
       </section>}
       <section className="grid gap-4 xl:grid-cols-[3fr_2fr]">
         {system.loading && !system.data ? <SkeletonPanel /> : <article className="admin-card">

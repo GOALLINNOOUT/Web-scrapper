@@ -1,0 +1,15 @@
+FROM rust:1.88-bookworm AS build
+WORKDIR /app
+COPY crates/load-balancer/Cargo.toml crates/load-balancer/Cargo.toml
+RUN printf '[workspace]\nmembers = ["crates/load-balancer"]\nresolver = "2"\n' > Cargo.toml
+COPY crates/load-balancer/src crates/load-balancer/src
+RUN cargo build --release -p load-balancer
+
+FROM debian:bookworm-slim
+WORKDIR /app
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends ca-certificates \
+  && rm -rf /var/lib/apt/lists/*
+ENV PORT=8080
+COPY --from=build /app/target/release/load-balancer /usr/local/bin/web-intel-load-balancer
+CMD ["web-intel-load-balancer"]

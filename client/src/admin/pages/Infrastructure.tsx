@@ -30,6 +30,7 @@ export function Infrastructure() {
     percentiles.refetch();
   });
   const latest = infra.data?.latest;
+  const serverInstances = infra.data?.server_instances || [];
   const series = useMemo(() => (infra.data?.series || []).map((item: any) => ({ timestamp: item.timestamp, cpu: item.api?.cpu || item['api.cpu'] || 0, memory: item.api?.memory || item['api.memory'] || 0, latency: item.api?.latency_p95 || item['api.latency_p95'] || 0, redis: item.redis?.memory_used || item['redis.memory_used'] || 0, mongo: item.mongodb?.latency_p95 || item['mongodb.latency_p95'] || 0, proxy: item.proxy_pool?.success_rate || item['proxy_pool.success_rate'] || 0 })), [infra.data]);
   useEffect(() => {
     setTabState(parseTab(searchParams.get('tab')));
@@ -40,7 +41,16 @@ export function Infrastructure() {
       <div className="admin-tabs">{tabs.map((item) => <button key={item} type="button" className={tab === item ? 'admin-tab-active' : ''} onClick={() => setTab(item)}>{item.replace('_', ' ')}</button>)}</div>
       {infra.loading && !infra.data ? <><SkeletonGrid count={4} /><SkeletonPanel /></> : (
         <>
-          {tab === 'api' ? <Panel title="API Service" cards={[['CPU', latest?.api?.cpu, '%'], ['Memory', latest?.api?.memory, '% RSS'], ['Network In', formatBytes(latest?.api?.network_in), '/s'], ['Latency P95', latest?.api?.latency_p95, 'ms'], ['Requests/sec', latest?.api?.requests_per_sec, 'req/s']]} chart={<TimeSeriesChart data={series} lines={[{ key: 'latency', color: 'var(--accent-primary)', label: 'Latency P95' }, { key: 'cpu', color: 'var(--accent-warning)', label: 'CPU' }, { key: 'memory', color: 'var(--accent-success)', label: 'Memory %' }]} />} /> : null}
+          {tab === 'api' ? <Panel title="API Service" cards={[['CPU', latest?.api?.cpu, '%'], ['Memory', latest?.api?.memory, '% RSS'], ['Network In', formatBytes(latest?.api?.network_in), '/s'], ['Latency P95', latest?.api?.latency_p95, 'ms'], ['Observed Requests/sec', latest?.api?.requests_per_sec, 'req/s']]} chart={<TimeSeriesChart data={series} lines={[{ key: 'latency', color: 'var(--accent-primary)', label: 'Latency P95' }, { key: 'cpu', color: 'var(--accent-warning)', label: 'CPU' }, { key: 'memory', color: 'var(--accent-success)', label: 'Memory %' }]} />} /> : null}
+          {tab === 'api' ? <article className="admin-card"><h2>API Instance Load</h2><DataTable data={serverInstances} defaultSortKey="instance_id" columns={[
+            { key: 'instance_id', label: 'Server' },
+        { key: 'status', label: 'Heartbeat', render: (row) => <StatusBadge status={String(row.status)} pulse={String(row.status).toLowerCase() !== 'active'} /> },
+            { key: 'api.requests_per_sec', label: 'Req/s', render: (row) => formatNumber((row as any).api?.requests_per_sec) },
+            { key: 'api.cpu', label: 'CPU %', render: (row) => formatNumber((row as any).api?.cpu) },
+            { key: 'api.memory', label: 'RSS %', render: (row) => formatNumber((row as any).api?.memory) },
+            { key: 'api.latency_p95', label: 'P95 ms', render: (row) => formatNumber((row as any).api?.latency_p95) },
+            { key: 'hostname', label: 'Host' }
+          ]} /></article> : null}
           {tab === 'workers' ? workers.loading && !workers.data ? <><SkeletonGrid count={4} /><SkeletonPanel /><SkeletonPanel height={260} /></> : <WorkerPanel latest={latest} workers={workers.data?.latest || []} series={workers.data?.series || []} /> : null}
           {tab === 'redis' ? <Panel title="Redis" cards={[['Memory Used', formatBytes(latest?.redis?.memory_used), 'used'], ['Commands/sec', latest?.redis?.commands_per_sec, 'cmd/s'], ['Latency', latest?.redis?.latency_ms, 'ms'], ['Clients', latest?.redis?.connected_clients, 'clients']]} chart={<TimeSeriesChart data={series} lines={[{ key: 'redis', color: 'var(--accent-info)', label: 'Memory Used' }]} />} /> : null}
           {tab === 'mongodb' ? <Panel title="MongoDB" cards={[
@@ -61,7 +71,7 @@ export function Infrastructure() {
           {tab === 'proxy_pool' ? <Panel title="Proxy Pool" cards={[
             ['Total Proxies', latest?.proxy_pool?.total_proxies, 'proxies'],
             ['Active', latest?.proxy_pool?.active_proxies, 'proxies'],
-            ['Success Rate', proxyMetricValue(latest, 'success'), proxyMetricUnit(latest, '%')],
+            ['Observed Success', proxyMetricValue(latest, 'success'), proxyMetricUnit(latest, '%')],
             ['Avg Response', proxyMetricValue(latest, 'response'), proxyMetricUnit(latest, 'ms')]
           ]} chart={<TimeSeriesChart data={series} lines={[{ key: 'proxy', color: 'var(--accent-success)', label: 'Success Rate' }]} yDomain={[0, 100]} />} /> : null}
         </>
@@ -131,13 +141,25 @@ function WorkerPanel({ latest, workers, series }: { latest: any; workers: any[];
   return (
     <>
       <section className="admin-grid-four">
-        <MetricCard title="Total Workers" value={latest?.workers?.total || workers.length} />
+        <MetricCard title="Observed Workers" value={latest?.workers?.total || workers.length} />
         <MetricCard title="Active" value={latest?.workers?.active || 0} />
         <MetricCard title="Idle" value={latest?.workers?.idle || 0} />
         <MetricCard title="Crashed" value={latest?.workers?.crashed || 0} status="critical" />
       </section>
       <article className="admin-card"><h2>Worker Cluster</h2><TimeSeriesChart data={series} lines={[{ key: 'cpu_percent', color: 'var(--accent-primary)', label: 'CPU' }, { key: 'memory_mb', color: 'var(--accent-success)', label: 'Memory MB' }, { key: 'pages_per_sec', color: 'var(--accent-warning)', label: 'Pages/sec' }]} /></article>
-      <article className="admin-card"><h2>Per-worker Table</h2><DataTable data={workers} columns={[{ key: 'worker_id', label: 'Worker ID' }, { key: 'status', label: 'Status', render: (row) => <StatusBadge status={String(row.status)} pulse /> }, { key: 'jobs_running', label: 'Running' }, { key: 'jobs_completed_total', label: 'Completed' }, { key: 'cpu_percent', label: 'CPU %' }, { key: 'memory_mb', label: 'Memory MB' }, { key: 'restart_count', label: 'Restarts' }, { key: 'jobs_failed_total', label: 'Failures' }]} /></article>
+      <article className="admin-card"><h2>Worker Load</h2><DataTable data={workers} columns={[
+        { key: 'worker_id', label: 'Worker ID' },
+        { key: 'worker_type', label: 'Type' },
+        { key: 'queue_name', label: 'Queue' },
+        { key: 'status', label: 'Status', render: (row) => <StatusBadge status={String(row.status)} pulse={String(row.status).toLowerCase() === 'active'} /> },
+        { key: 'jobs_running', label: 'Running' },
+        { key: 'jobs_completed_total', label: 'Completed' },
+        { key: 'jobs_failed_total', label: 'Failures' },
+        { key: 'pages_per_sec', label: 'Pages/sec' },
+        { key: 'cpu_percent', label: 'CPU %' },
+        { key: 'memory_mb', label: 'Memory MB' },
+        { key: 'hostname', label: 'Host' }
+      ]} /></article>
     </>
   );
 }

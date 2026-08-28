@@ -6,18 +6,30 @@ services:
     maxmemoryPolicy: allkeys-lru
 
   - type: web
-    name: web-intel-api
+    name: web-intel-load-balancer
+    runtime: docker
+    plan: starter
+    dockerfilePath: ./docker/Dockerfile.load-balancer
+    healthCheckPath: /health
+    envVars:
+      - key: PORT
+        value: "8080"
+      - key: BACKENDS
+        sync: false
+
+  - type: web
+    name: web-intel-api-1
     runtime: docker
     plan: starter
     dockerfilePath: ./docker/Dockerfile.api
     healthCheckPath: /health
-    envVars:
+    envVars: &apiEnv
       - key: NODE_ENV
         value: production
       - key: PERFORMANCE_MODE
         value: production
-      - key: START_WORKERS_IN_API
-        value: "false"
+      - key: PORT
+        value: "4000"
       - key: WEB_WORKERS
         value: "1"
       - key: CLIENT_ORIGIN
@@ -31,37 +43,34 @@ services:
           property: connectionString
       - key: CRAWLER_RESPECT_ROBOTS
         value: "false"
-      - key: CRAWLER_USER_AGENT
-        value: WebIntelligenceCrawler/1.0
 
-  - type: worker
-    name: web-intel-worker
+  - type: web
+    name: web-intel-api-2
     runtime: docker
     plan: starter
-    dockerfilePath: ./docker/Dockerfile.worker
-    envVars:
-      - key: NODE_ENV
-        value: production
-      - key: PERFORMANCE_MODE
-        value: production
+    dockerfilePath: ./docker/Dockerfile.api
+    healthCheckPath: /health
+    envVars: *apiEnv
+
+  - type: worker
+    name: web-intel-rust-worker-1
+    runtime: docker
+    plan: starter
+    dockerfilePath: ./docker/Dockerfile.rust-worker
+    envVars: &workerEnv
       - key: MONGODB_URI
         sync: false
+      - key: MONGODB_DB
+        value: web_intelligence
       - key: REDIS_URL
         fromService:
           type: keyvalue
           name: web-intel-redis
           property: connectionString
-      - key: CRAWL_JOB_WORKER_CONCURRENCY
-        value: "4"
-      - key: CRAWL_PAGE_WORKER_CONCURRENCY
-        value: "50"
-      - key: CRAWL_PAGE_WORKER_RATE
-        value: "250"
-      - key: CRAWLER_DOMAIN_CONCURRENCY
-        value: "4"
-      - key: CRAWLER_DOMAIN_RATE_PER_SECOND
-        value: "5"
-      - key: CRAWLER_RESPECT_ROBOTS
-        value: "false"
-      - key: CRAWLER_USER_AGENT
-        value: WebIntelligenceCrawler/1.0
+
+  - type: worker
+    name: web-intel-rust-worker-2
+    runtime: docker
+    plan: starter
+    dockerfilePath: ./docker/Dockerfile.rust-worker
+    envVars: *workerEnv

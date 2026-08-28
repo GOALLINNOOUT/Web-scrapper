@@ -4,6 +4,7 @@ dotenv.config();
 
 export const config = {
   nodeEnv: process.env.NODE_ENV || 'development',
+  instanceId: process.env.INSTANCE_ID || process.env.HOSTNAME || `api-${process.pid}`,
   port: Number(process.env.PORT || 4000),
   clientOrigin: process.env.CLIENT_ORIGIN || 'http://localhost:5173',
   mongodbUri: process.env.MONGODB_URI || '',

@@ -15,6 +15,12 @@
     "build": "npm run build --workspace server && npm run build --workspace client",
     "typecheck": "npm run typecheck --workspace server && npm run typecheck --workspace client",
     "test": "npm run test --workspace server",
+    "test:lb": "powershell -ExecutionPolicy Bypass -File scripts/test-load-balancer.ps1",
+    "test:workers": "node scripts/test-rust-workers.mjs",
+    "test:ws": "node scripts/test-websockets.mjs",
+    "bench:servers": "node scripts/bench-servers.mjs",
+    "start:lb:local": "powershell -ExecutionPolicy Bypass -File scripts/start-local-load-balancer.ps1",
+    "stop:lb:local": "powershell -ExecutionPolicy Bypass -File scripts/stop-local-load-balancer.ps1",
     "benchmark:crawl": "node scripts/crawl-benchmark.js"
   }
 }

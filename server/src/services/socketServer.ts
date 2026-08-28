@@ -93,6 +93,10 @@ async function sendInitialSnapshots(socket: Parameters<SocketServer['on']>[1] ex
     const workers = await WorkerMetric.find().sort({ timestamp: -1 }).limit(25).lean();
     socket.emit('workers:live', workers);
   }
+  if (rooms.has('live:crawling')) {
+    const queue = await QueueMetric.findOne().sort({ timestamp: -1 }).lean();
+    socket.emit('metrics:live', { queue });
+  }
   if (rooms.has('live:failures')) {
     const failures = await FailureEvent.find().sort({ timestamp: -1 }).limit(50).lean();
     socket.emit('failures:live', failures);

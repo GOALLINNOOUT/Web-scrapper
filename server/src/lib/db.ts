@@ -23,6 +23,7 @@ export async function connectDatabase(uri?: string) {
 
   mongoose.set('strictQuery', true);
   await mongoose.connect(uri, {
+    ...(process.env.MONGODB_DB ? { dbName: process.env.MONGODB_DB } : {}),
     maxPoolSize: Number(process.env.MONGODB_MAX_POOL_SIZE || 100),
     minPoolSize: Number(process.env.MONGODB_MIN_POOL_SIZE || 10),
     socketTimeoutMS: 30_000,

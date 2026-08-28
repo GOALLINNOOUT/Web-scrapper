@@ -22,6 +22,7 @@ import { AlertEvent } from '../models/AlertEvent.js';
 import { retentionDate } from '../utils/retention.js';
 import { enrichDomain, rebuildDomainProfile } from '../intelligence/domain.service.js';
 import { logger } from '../utils/logger.js';
+import { config as appConfig } from '../config/index.js';
 import { createDailyEmailAlert } from '../services/alertService.js';
 import { updateCrawlSummaryForPage, rebuildCrawlSummary } from '../services/crawlSummaryService.js';
 import { invalidateCrawlReads, invalidateDomainReads, invalidateWorkspaceReads } from '../services/cacheInvalidation.js';
@@ -29,6 +30,7 @@ import { publishLiveEvent } from '../services/liveEvents.js';
 import { getWorkspaceSettings } from '../services/workspaceSettingsService.js';
 import { decryptPageDocument, encryptPageContent, shouldEncryptStoredPageText } from '../services/changePayloadCrypto.js';
 import { queueDomainProfileRefresh } from '../services/domainProfileRefreshQueue.js';
+import { redisConnection } from '../queue/connection.js';
 
 function sevenDaysFromNow() {
   return new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
@@ -97,15 +99,15 @@ export class CrawlManager {
     });
     await invalidateWorkspaceReads(deviceId).catch(() => undefined);
 
-    if (this.queues) {
-      const queueJob = await this.queues.crawlJobs.add('run-crawl', { crawlId: job._id.toString(), deviceId }, {
-        attempts: 3,
-        backoff: { type: 'exponential', delay: 2000 },
-        removeOnComplete: 100,
-        removeOnFail: 200
-      });
-      job.queueJobId = queueJob.id || null;
-      await job.save();
+    if (appConfig.redisUrl) {
+      try {
+        const client = redisConnection();
+        await client.lpush('webscrapper:jobs', JSON.stringify({ crawlId: job._id.toString(), deviceId }));
+        job.queueJobId = job._id.toString();
+        await job.save();
+      } catch (error) {
+        logger.error({ err: error instanceof Error ? error.message : String(error) }, `Failed to push job ${job._id} to Redis`);
+      }
     } else {
       this.runJob(job._id.toString()).catch((error) => {
         logger.error(error, `Crawl ${job._id} crashed`);
