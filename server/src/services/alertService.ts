@@ -1,4 +1,5 @@
 import { AlertEvent } from '../models/AlertEvent.js';
+import { DISABLE_METRICS } from '../utils/featureFlags.js';
 
 interface DailyEmailAlertInput {
   deviceId: string;
@@ -9,6 +10,7 @@ interface DailyEmailAlertInput {
 }
 
 export async function createDailyEmailAlert(input: DailyEmailAlertInput) {
+  if (DISABLE_METRICS) return null;
   const emails = [...new Set(input.emails.map((email) => email.trim().toLowerCase()).filter(Boolean))];
   if (emails.length === 0) return null;
 

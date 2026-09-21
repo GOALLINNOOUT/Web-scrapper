@@ -31,6 +31,7 @@ import { getWorkspaceSettings } from '../services/workspaceSettingsService.js';
 import { decryptPageDocument, encryptPageContent, shouldEncryptStoredPageText } from '../services/changePayloadCrypto.js';
 import { queueDomainProfileRefresh } from '../services/domainProfileRefreshQueue.js';
 import { redisConnection } from '../queue/connection.js';
+import { DISABLE_METRICS } from '../utils/featureFlags.js';
 
 function sevenDaysFromNow() {
   return new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
@@ -363,13 +364,15 @@ export class CrawlManager {
           await rebuildDomainProfile(deviceId, domain).catch(() => undefined);
           await invalidateDomainReads(deviceId).catch(() => undefined);
         }
-        await AlertEvent.create({
-          deviceId,
-          type: 'new_domain',
-          domain,
-          crawlId: id,
-          message: `Domain profile updated for ${domain}`
-        }).catch(() => undefined);
+        if (!DISABLE_METRICS) {
+          await AlertEvent.create({
+            deviceId,
+            type: 'new_domain',
+            domain,
+            crawlId: id,
+            message: `Domain profile updated for ${domain}`
+          }).catch(() => undefined);
+        }
 
         if (!this.queues) {
           await enrichDomain(deviceId, domain).catch(() => undefined);
@@ -383,12 +386,14 @@ export class CrawlManager {
         deadLetterReason: message,
         completedAt: new Date()
       });
-      await AlertEvent.create({
-        deviceId: (await CrawlJob.findById(id).lean())?.deviceId || 'unknown',
-        type: 'crawl_failed',
-        crawlId: id,
-        message
-      }).catch(() => undefined);
+      if (!DISABLE_METRICS) {
+        await AlertEvent.create({
+          deviceId: (await CrawlJob.findById(id).lean())?.deviceId || 'unknown',
+          type: 'crawl_failed',
+          crawlId: id,
+          message
+        }).catch(() => undefined);
+      }
     } finally {
       this.running.delete(id);
     }

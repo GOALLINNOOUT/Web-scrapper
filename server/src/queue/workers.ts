@@ -16,6 +16,7 @@ import { reserveCrawlUrls } from '../services/urlDeduplicator.js';
 import { incrementMetric, setGauge } from '../utils/metrics.js';
 import { crawlPageJobId } from './jobIds.js';
 import { recordFailureEvent } from '../services/metricsCollector.js';
+import { DISABLE_METRICS } from '../utils/featureFlags.js';
 
 export interface WorkerBundle {
   crawlWorker: Worker;
@@ -130,7 +131,7 @@ export function startQueueWorkers(queues: QueueBundle): WorkerBundle {
       if (!deviceId || !domain) throw new Error('Missing domain enrichment payload');
       const profile = await enrichDomain(deviceId, domain, force);
       await invalidateDomainReads(deviceId).catch(() => undefined);
-      return { domain: profile.domain };
+      return { domain: profile?.domain || domain };
     },
     {
       connection,
@@ -142,12 +143,12 @@ export function startQueueWorkers(queues: QueueBundle): WorkerBundle {
   crawlWorker.on('failed', async (job, error) => {
     logger.error({ jobId: job?.id, err: error.message }, 'Crawl queue job failed');
     incrementMetric('webintel_queue_jobs_failed_total', 'Total failed BullMQ jobs', { queue: queueNames.crawlJobs });
-    await recordFailureEvent({ jobId: String(job?.id || ''), workerId: 'crawl-jobs', error, retryCount: job?.attemptsMade || 0, isTerminal: true }).catch(() => undefined);
+    if (!DISABLE_METRICS) await recordFailureEvent({ jobId: String(job?.id || ''), workerId: 'crawl-jobs', error, retryCount: job?.attemptsMade || 0, isTerminal: true }).catch(() => undefined);
   });
   crawlPageWorker.on('failed', async (job, error) => {
     logger.error({ jobId: job?.id, crawlId: job?.data?.crawlId, deviceId: job?.data?.deviceId, domain: safeDomain(job?.data?.url), err: error.message }, 'Crawl page job failed');
     incrementMetric('webintel_queue_jobs_failed_total', 'Total failed BullMQ jobs', { queue: queueNames.crawlPages });
-    await recordFailureEvent({ jobId: String(job?.id || ''), workerId: 'crawl-pages', error, retryCount: job?.attemptsMade || 0, isTerminal: true, url: String(job?.data?.url || '') }).catch(() => undefined);
+    if (!DISABLE_METRICS) await recordFailureEvent({ jobId: String(job?.id || ''), workerId: 'crawl-pages', error, retryCount: job?.attemptsMade || 0, isTerminal: true, url: String(job?.data?.url || '') }).catch(() => undefined);
     const crawlId = String(job?.data?.crawlId || '');
     if (crawlId) {
       await CrawlJob.updateOne({ _id: crawlId, pagesCrawled: 0 }, {
@@ -158,12 +159,12 @@ export function startQueueWorkers(queues: QueueBundle): WorkerBundle {
   monitoringWorker.on('failed', async (job, error) => {
     logger.error({ jobId: job?.id, profileId: job?.data?.profileId, deviceId: job?.data?.deviceId, err: error.message }, 'Monitoring check job failed');
     incrementMetric('webintel_queue_jobs_failed_total', 'Total failed BullMQ jobs', { queue: queueNames.monitoringChecks });
-    await recordFailureEvent({ jobId: String(job?.id || ''), workerId: 'monitoring-checks', error, retryCount: job?.attemptsMade || 0, isTerminal: true }).catch(() => undefined);
+    if (!DISABLE_METRICS) await recordFailureEvent({ jobId: String(job?.id || ''), workerId: 'monitoring-checks', error, retryCount: job?.attemptsMade || 0, isTerminal: true }).catch(() => undefined);
   });
   domainWorker.on('failed', async (job, error) => {
     logger.error({ jobId: job?.id, err: error.message }, 'Domain enrichment job failed');
     incrementMetric('webintel_queue_jobs_failed_total', 'Total failed BullMQ jobs', { queue: queueNames.domainEnrichment });
-    await recordFailureEvent({ jobId: String(job?.id || ''), workerId: 'domain-enrichment', domain: String(job?.data?.domain || ''), error, retryCount: job?.attemptsMade || 0, isTerminal: true }).catch(() => undefined);
+    if (!DISABLE_METRICS) await recordFailureEvent({ jobId: String(job?.id || ''), workerId: 'domain-enrichment', domain: String(job?.data?.domain || ''), error, retryCount: job?.attemptsMade || 0, isTerminal: true }).catch(() => undefined);
   });
 
   const metricsTimer = setInterval(() => {

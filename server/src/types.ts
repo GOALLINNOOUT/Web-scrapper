@@ -57,6 +57,22 @@ export interface Metadata {
   jsonLdTypes?: string[];
 }
 
+export interface JobPostingData {
+  title?: string;
+  description?: string;
+  employmentType?: string;
+  datePosted?: string;
+  validThrough?: string;
+  hiringOrganization?: {
+    name?: string;
+    url?: string;
+    logo?: string;
+  };
+  jobLocation?: string[];
+  baseSalary?: string;
+  applicationUrl?: string;
+}
+
 export interface SocialLinks {
   twitter: string[];
   linkedin: string[];

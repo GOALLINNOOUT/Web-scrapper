@@ -6,6 +6,7 @@ import { PageChange } from '../models/PageChange.js';
 import { domainFromUrl, normalizeUrl } from '../utils/url.js';
 import { decryptPageDocument, encryptChangePayload } from './changePayloadCrypto.js';
 import { timeMongoOperation } from '../utils/metrics.js';
+import { DISABLE_METRICS } from '../utils/featureFlags.js';
 
 export async function detectPageChanges(input: {
   deviceId: string;
@@ -113,7 +114,7 @@ export async function detectPageChanges(input: {
   if (changes.length === 0) return [];
 
   const domain = domainFromUrl(input.url);
-  await PageChange.insertMany(changes.map((change) => ({
+  if (!DISABLE_METRICS) await PageChange.insertMany(changes.map((change) => ({
     deviceId: input.deviceId,
     workspaceId: input.workspaceId || input.deviceId,
     url: input.url,
@@ -125,7 +126,7 @@ export async function detectPageChanges(input: {
     detectedAt: new Date()
   })), { ordered: false });
 
-  await ChangeEvent.insertMany(changes.map((change) => ({
+  if (!DISABLE_METRICS) await ChangeEvent.insertMany(changes.map((change) => ({
     deviceId: input.deviceId,
     workspaceId: input.workspaceId || input.deviceId,
     url: input.url,
@@ -141,7 +142,7 @@ export async function detectPageChanges(input: {
   })), { ordered: false }).catch(() => undefined);
 
   const important = changes.filter((change) => change.severity === 'high' || change.severity === 'medium');
-  if (important.length > 0) {
+  if (!DISABLE_METRICS && important.length > 0) {
     await AlertEvent.create({
       deviceId: input.deviceId,
       type: 'change_detected',

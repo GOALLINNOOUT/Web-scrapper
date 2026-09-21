@@ -4,6 +4,7 @@ import { SOCIAL_KEYS } from '../extractors/social.js';
 import { lookupDns } from './dns.service.js';
 import { lookupWhois } from './whois.service.js';
 import { timeMongoOperation } from '../utils/metrics.js';
+import { DISABLE_METRICS } from '../utils/featureFlags.js';
 
 const ENRICHMENT_TTL_MS = 60 * 24 * 60 * 60 * 1000;
 
@@ -42,7 +43,7 @@ export async function rebuildDomainProfile(deviceId: string, domain: string) {
   ]).then((rows) => rows.map((row) => buildDomainProfileDataFromAggregate(row as DomainProfileAggregateRow))));
   const nextProfile = profile || buildDomainProfileData([]);
 
-  const updated = await DomainProfile.findOneAndUpdate(
+  const updated = !DISABLE_METRICS ? await DomainProfile.findOneAndUpdate(
     { deviceId, domain: canonicalDomain },
     {
       $set: {
@@ -58,12 +59,14 @@ export async function rebuildDomainProfile(deviceId: string, domain: string) {
       ...(nextProfile.lastCrawledAt ? {} : { $unset: { lastCrawledAt: '' } })
     },
     { upsert: true, new: true }
-  );
+  ) : null;
 
-  await DomainProfile.deleteMany({
-    deviceId,
-    domain: { $in: domainAliases(canonicalDomain).filter((alias) => alias !== canonicalDomain) }
-  }).catch(() => undefined);
+  if (!DISABLE_METRICS) {
+    await DomainProfile.deleteMany({
+      deviceId,
+      domain: { $in: domainAliases(canonicalDomain).filter((alias) => alias !== canonicalDomain) }
+    }).catch(() => undefined);
+  }
 
   return updated;
 }
@@ -71,7 +74,7 @@ export async function rebuildDomainProfile(deviceId: string, domain: string) {
 export async function enrichDomain(deviceId: string, domain: string, force = false) {
   const canonicalDomain = normalizeDomainName(domain);
   const profile = await rebuildDomainProfile(deviceId, canonicalDomain);
-  const refreshedAt = profile.enrichmentRefreshedAt ? new Date(profile.enrichmentRefreshedAt).getTime() : 0;
+  const refreshedAt = profile?.enrichmentRefreshedAt ? new Date(profile.enrichmentRefreshedAt).getTime() : 0;
   if (!force && refreshedAt && Date.now() - refreshedAt < ENRICHMENT_TTL_MS) return profile;
 
   const [whois, dns] = await Promise.all([
@@ -79,6 +82,7 @@ export async function enrichDomain(deviceId: string, domain: string, force = fal
     lookupDns(domain).then((value) => ({ ...value, refreshedAt: new Date() })).catch((error) => ({ error: error instanceof Error ? error.message : 'DNS failed', refreshedAt: new Date() }))
   ]);
 
+  if (DISABLE_METRICS) return profile;
   return DomainProfile.findOneAndUpdate(
     { deviceId, domain: canonicalDomain },
     { $set: { whois, dns, enrichmentRefreshedAt: new Date() } },

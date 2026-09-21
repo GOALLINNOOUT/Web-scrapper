@@ -18,6 +18,7 @@ import { logger } from '../utils/logger.js';
 import { getApiLatencySnapshot } from '../utils/metrics.js';
 import { broadcastSystemHealth, emitAdminRoom } from './socketServer.js';
 import { evaluateAlerts } from './alertEngine.js';
+import { DISABLE_METRICS } from '../utils/featureFlags.js';
 
 let started = false;
 let lastQueueBacklog = 0;
@@ -41,6 +42,7 @@ let proxyStatsCache: Awaited<ReturnType<typeof getProxyStatsUncached>> | null = 
 let proxyStatsCacheAt = 0;
 
 export function startAdminMetricsCollector(queues?: QueueBundle) {
+  if (DISABLE_METRICS) return;
   if (started) return;
   started = true;
 
@@ -78,6 +80,7 @@ export async function recordFailureEvent(input: {
   proxy?: string;
   userAgent?: string;
 }) {
+  if (DISABLE_METRICS) return;
   const domain = input.domain || safeDomain(input.url);
   const failureType = classifyFailure(input.error?.message || '', input.httpStatus);
   const event = await FailureEvent.create({
@@ -122,7 +125,8 @@ async function collectSystemMetrics(queues?: QueueBundle) {
   lastCompletedJobs = crawlStats.completedJobs;
   lastFailureJobs = crawlStats.failedJobs;
 
-  const metric = await MetricSnapshot.create({
+  let metric = null;
+  if (!DISABLE_METRICS) metric = await MetricSnapshot.create({
     timestamp,
     instance_id: config.instanceId,
     hostname: os.hostname(),
@@ -167,9 +171,12 @@ async function collectSystemMetrics(queues?: QueueBundle) {
     }
   });
 
-  const queueDoc = await QueueMetric.create({ timestamp, ...queueMetric });
-  emitAdminRoom('live:overview', 'metrics:live', { metric: metric.toObject(), queue: queueDoc.toObject() }, 'metrics:live');
-  emitAdminRoom('live:crawling', 'metrics:live', { queue: queueDoc.toObject() }, 'metrics:live');
+  let queueDoc = null;
+  if (!DISABLE_METRICS) queueDoc = await QueueMetric.create({ timestamp, ...queueMetric });
+  if (metric && queueDoc) {
+    emitAdminRoom('live:overview', 'metrics:live', { metric: metric.toObject(), queue: queueDoc.toObject() }, 'metrics:live');
+    emitAdminRoom('live:crawling', 'metrics:live', { queue: queueDoc.toObject() }, 'metrics:live');
+  }
 }
 
 async function collectWorkerMetrics(queues?: QueueBundle) {
@@ -185,7 +192,7 @@ async function collectWorkerMetrics(queues?: QueueBundle) {
     const completed = Number(counts.completed || 0);
     const failed = Number(counts.failed || 0);
     const instanceWorkerId = `${config.instanceId}:${def.id}`;
-    docs.push(await WorkerMetric.create({
+    if (!DISABLE_METRICS) docs.push(await WorkerMetric.create({
       timestamp,
       worker_id: instanceWorkerId,
       worker_name: def.name,
@@ -227,7 +234,7 @@ async function collectDomainMetrics() {
     const dns = failures.filter((failure) => failure.failure_type === 'dns_failure').length;
     if (total === 0 && failures.length === 0) continue;
 
-    docs.push(await DomainMetric.create({
+    if (!DISABLE_METRICS) docs.push(await DomainMetric.create({
       timestamp,
       domain: profile.domain,
       sample_count: total,

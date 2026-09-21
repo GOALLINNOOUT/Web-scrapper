@@ -6,6 +6,7 @@ import { MetricSnapshot } from '../models/MetricSnapshot.js';
 import { QueueMetric } from '../models/QueueMetric.js';
 import { alertThresholds } from '../config/alertThresholds.js';
 import { emitAdminAlert } from './socketServer.js';
+import { DISABLE_METRICS } from '../utils/featureFlags.js';
 
 interface Evidence {
   metric: string;
@@ -208,6 +209,7 @@ async function fire(candidate: CandidateAlert) {
     return;
   }
 
+  if (DISABLE_METRICS) return null;
   const alert = await AlertRecord.create({
     alert_id: crypto.randomUUID(),
     alert_key: candidate.key,
@@ -269,7 +271,7 @@ async function resolveAlert(alert: any) {
   alert.status = 'resolved';
   alert.resolved_at = resolvedAt;
   alert.duration_seconds = duration;
-  await alert.save();
+  if (!DISABLE_METRICS) await alert.save();
   return { resolvedAt, duration };
 }
 
