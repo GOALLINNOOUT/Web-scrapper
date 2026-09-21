@@ -12,6 +12,7 @@ let renderWindowCount = 0;
 
 export interface RenderedPageSnapshot {
   html: string;
+  visibleText: string;
   techStack: string[];
 }
 
@@ -72,13 +73,14 @@ export async function renderPageSnapshot(url: string, signal?: AbortSignal): Pro
     await page.waitForLoadState('networkidle', { timeout: 5_000 }).catch(() => undefined);
     await page.waitForTimeout(Number(process.env.CRAWLER_RENDER_SETTLE_MS || 750)).catch(() => undefined);
     if (signal?.aborted || renderController.signal.aborted) return null;
-    const [html, techStack] = await Promise.all([
+    const [html, visibleText, techStack] = await Promise.all([
       page.content(),
+      page.innerText ? page.innerText('body').catch(() => '') : Promise.resolve(''),
       detectRuntimeTech(page).catch(() => [])
     ]);
     observeHistogram('webintel_render_duration_seconds', 'JavaScript render duration in seconds', Number(process.hrtime.bigint() - startedAt) / 1_000_000_000, { status: 'rendered' });
     incrementMetric('webintel_render_attempts_total', 'Total JavaScript render attempts', { status: 'rendered' });
-    return { html, techStack };
+    return { html, visibleText, techStack };
   } catch {
     const status = renderController.signal.aborted ? 'timeout' : 'failed';
     observeHistogram('webintel_render_duration_seconds', 'JavaScript render duration in seconds', Number(process.hrtime.bigint() - startedAt) / 1_000_000_000, { status });
@@ -250,6 +252,7 @@ interface PageLike {
   waitForTimeout: (timeout: number) => Promise<unknown>;
   evaluate: <T>(callback: () => T) => Promise<T>;
   content: () => Promise<string>;
+  innerText?: (selector: string) => Promise<string>;
   close: () => Promise<unknown>;
 }
 

@@ -7,6 +7,7 @@ import { extractEmails } from '../src/extractors/emails.js';
 import { extractLinks } from '../src/extractors/links.js';
 import { extractMetadata } from '../src/extractors/metadata.js';
 import { extractSocialLinks } from '../src/extractors/social.js';
+import { extractContent } from '../src/extractors/content.js';
 import { detectTechStack } from '../src/extractors/techStack.js';
 import { isPrivateHost, isPrivateUrl } from '../src/middleware/ssrfProtection.js';
 import { sanitizeDeep } from '../src/middleware/inputSanitizer.js';
@@ -17,6 +18,16 @@ import { defaultWorkspaceSettings, mergeSettings } from '../src/services/workspa
 import { buildDomainProfileData, normalizeDomainName } from '../src/intelligence/domain.service.js';
 import type { CrawlConfig } from '../src/types.js';
 import { isSameDomain, normalizeUrl } from '../src/utils/url.js';
+
+test('extracts content from non-standard rendered job page text', () => {
+  const $ = cheerio.load('<body><div class="job-shell"><div class="description">Ignored by paragraph-only extraction</div></div></body>');
+  const result = extractContent($, 'Apply now\n\nThis internship involves building payment tools for African businesses.\n\nRequirements include JavaScript and communication skills.');
+
+  assert.equal(result.headings.length, 0);
+  assert.equal(result.paragraphs.length, 2);
+  assert.match(result.text, /building payment tools/);
+  assert.ok(result.wordCount > 0);
+});
 
 test('normalizes URLs and rejects invalid schemes', () => {
   assert.equal(normalizeUrl('vercel.com'), 'https://vercel.com/');

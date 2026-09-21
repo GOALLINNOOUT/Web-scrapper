@@ -87,7 +87,7 @@ export function metadataRouter() {
           try {
             const renderedSnapshot = await renderPageSnapshot(url);
             if (renderedSnapshot) {
-              result = mergePreviewResults(staticResult, extractPreview(renderedSnapshot.html, url, shouldExtract));
+              result = mergePreviewResults(staticResult, extractPreview(renderedSnapshot.html, url, shouldExtract, renderedSnapshot.visibleText));
               renderedSuccessfully = true;
             } else {
               logger.warn({ url }, 'Preview JavaScript rendering returned no snapshot; using static result');
@@ -122,7 +122,8 @@ type PreviewResult = Record<string, any>;
 function extractPreview(
   html: string,
   url: string,
-  shouldExtract: (field: ExtractorName) => boolean
+  shouldExtract: (field: ExtractorName) => boolean,
+  visibleText = ''
 ): PreviewResult {
   const $ = cheerio.load(html);
   const result: PreviewResult = { url };
@@ -142,7 +143,7 @@ function extractPreview(
   if (shouldExtract('emails')) result.emails = extractEmails(html);
   if (shouldExtract('social')) result.social = extractSocialLinks(socialLinks);
   if (shouldExtract('images')) result.images = extractImages($, url);
-  if (shouldExtract('content')) result.content = extractContent($);
+  if (shouldExtract('content')) result.content = extractContent($, visibleText);
   if (shouldExtract('techStack')) result.techStack = detectTechStack($, {}, html);
 
   return result;
